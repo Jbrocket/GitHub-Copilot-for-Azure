@@ -30,7 +30,7 @@ Categories from [Available services by region types and categories](https://lear
 
 During Phase 2 (Plan Generation), for each resource being added to the plan:
 
-1. Identify the resource category and load its [category index](resources/) (e.g., `resources/compute/index.md`)
+1. Identify the resource category and load its category index (e.g., `resources/compute/index.md`)
 2. Find the resource in the category table and load its main `.md` file
 3. Use the file's **Identity** section for ARM type and API version
 4. Use **Subtypes** and **SKU Names** to select valid `kind` and `sku` values
