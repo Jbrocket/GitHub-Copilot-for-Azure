@@ -5,7 +5,8 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdirSync, writeFileSync, rmSync, statSync, existsSync } from 'node:fs';
+import { findMarkdownFiles } from '../commands/utils.js';
 
 // We'll test the internal functions by importing them
 // First, let's create test fixtures
@@ -127,6 +128,61 @@ describe('check command', () => {
       
       expect(config.defaults['SKILL.md']).toBe(10);
       expect(config.overrides['special.md']).toBe(100);
+    });
+  });
+
+  describe('directory and file targeting', () => {
+    it('expands directories to find only markdown files', () => {
+      mkdirSync(join(TEST_DIR, 'skilldir'), { recursive: true });
+      writeFileSync(join(TEST_DIR, 'skilldir', 'SKILL.md'), '# Skill content');
+      writeFileSync(join(TEST_DIR, 'skilldir', 'README.md'), '# README');
+      writeFileSync(join(TEST_DIR, 'skilldir', 'code.ts'), 'console.log("test")');
+
+      const files = findMarkdownFiles(join(TEST_DIR, 'skilldir'));
+
+      expect(files.length).toBe(2);
+      expect(files.some(f => f.endsWith('SKILL.md'))).toBe(true);
+      expect(files.some(f => f.endsWith('README.md'))).toBe(true);
+      expect(files.some(f => f.endsWith('.ts'))).toBe(false);
+    });
+
+    it('expands nested directories recursively', () => {
+      mkdirSync(join(TEST_DIR, 'skilldir', 'references'), { recursive: true });
+      writeFileSync(join(TEST_DIR, 'skilldir', 'SKILL.md'), '# Skill');
+      writeFileSync(join(TEST_DIR, 'skilldir', 'references', 'detail.md'), '# Detail');
+
+      const files = findMarkdownFiles(join(TEST_DIR, 'skilldir'));
+
+      expect(files.length).toBe(2);
+      expect(files.some(f => f.endsWith('SKILL.md'))).toBe(true);
+      expect(files.some(f => f.endsWith('detail.md'))).toBe(true);
+    });
+
+    it('distinguishes between directory and file targets', () => {
+      mkdirSync(join(TEST_DIR, 'mydir'), { recursive: true });
+      writeFileSync(join(TEST_DIR, 'mydir', 'file.md'), 'content');
+      writeFileSync(join(TEST_DIR, 'afile.md'), 'content');
+
+      // Directory target expands to contained markdown files
+      const dirFiles = findMarkdownFiles(join(TEST_DIR, 'mydir'));
+      expect(dirFiles.length).toBe(1);
+
+      // File target is identified as not a directory
+      expect(statSync(join(TEST_DIR, 'afile.md')).isDirectory()).toBe(false);
+    });
+
+    it('returns empty array for non-existent directory', () => {
+      const files = findMarkdownFiles(join(TEST_DIR, 'nonexistent'));
+      expect(files).toEqual([]);
+    });
+
+    it('returns empty array for directory with no markdown files', () => {
+      mkdirSync(join(TEST_DIR, 'nomd'), { recursive: true });
+      writeFileSync(join(TEST_DIR, 'nomd', 'script.ts'), 'code');
+      writeFileSync(join(TEST_DIR, 'nomd', 'data.json'), '{}');
+
+      const files = findMarkdownFiles(join(TEST_DIR, 'nomd'));
+      expect(files).toEqual([]);
     });
   });
 
