@@ -209,11 +209,6 @@ function groupByType<T>(items: T[], keyFn: (item: T) => string): Map<string, T[]
   return map;
 }
 
-function shortType(type: string): string {
-  const parts = type.split('/');
-  return parts[parts.length - 1];
-}
-
 function heading(n: number, title: string): void {
   console.log(`\n${chalk.bold(`${n}. ${title}`)}`);
 }
@@ -262,7 +257,7 @@ function compare(planResources: PlanResource[], bicepResources: BicepResource[])
     for (const [type, subtype] of subtypeMap) {
       const inBicep = bicepTypes.has(type);
       if (!inBicep) issues++;
-      subTable.push([subtype, shortType(type), inBicep ? 'Yes' : 'No', inBicep ? PASS : FAIL]);
+      subTable.push([subtype, type, inBicep ? 'Yes' : 'No', inBicep ? PASS : FAIL]);
     }
     console.log(subTable.toString());
   }
@@ -289,7 +284,7 @@ function compare(planResources: PlanResource[], bicepResources: BicepResource[])
     const match = mismatched.length === 0 && !(planSkus.size > 0 && !br.sku);
 
     if (!match) issues++;
-    skuTable.push([shortType(br.type), planSkuList, bicepSku, match ? PASS : FAIL]);
+    skuTable.push([br.type, planSkuList, bicepSku, match ? PASS : FAIL]);
     skusCompared = true;
   }
 
@@ -326,7 +321,7 @@ function compare(planResources: PlanResource[], bicepResources: BicepResource[])
       }
       propsCompared = true;
       propTable.push([
-        shortType(br.type),
+        br.type,
         p,
         inPlan ? 'Yes' : chalk.dim('No'),
         inBicep ? 'Yes' : chalk.dim('No'),
@@ -341,7 +336,7 @@ function compare(planResources: PlanResource[], bicepResources: BicepResource[])
     const hasProps = group.some(r => r.properties && Object.keys(r.properties).length > 0);
     const bicepMatch = bicepResources.find(br => br.type === type);
     if (hasProps && bicepMatch && bicepMatch.properties.length === 0) {
-      propTable.push([shortType(type), chalk.dim('(all)'), 'Yes', chalk.dim('No'), FAIL]);
+      propTable.push([type, chalk.dim('(all)'), 'Yes', chalk.dim('No'), FAIL]);
       issues++;
       propsCompared = true;
     }
@@ -401,8 +396,8 @@ function compare(planResources: PlanResource[], bicepResources: BicepResource[])
       }
       depsCompared = true;
       depTable.push([
-        shortType(mod.type),
-        shortType(dep),
+        mod.type,
+        dep,
         inPlan ? 'Yes' : chalk.dim('No'),
         inBicep ? 'Yes' : chalk.dim('No'),
         match ? PASS : (inBicep && !inPlan ? WARN : FAIL),
@@ -420,7 +415,7 @@ function compare(planResources: PlanResource[], bicepResources: BicepResource[])
   heading(6, 'API VERSIONS');
   const versionTable = new Table({ head: ['Resource Type', 'Version', 'File'] });
   for (const br of bicepResources) {
-    versionTable.push([shortType(br.type), br.version, br.file]);
+    versionTable.push([br.type, br.version, br.file]);
   }
   console.log(versionTable.toString());
 
