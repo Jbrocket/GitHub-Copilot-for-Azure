@@ -69,7 +69,7 @@ function logResult(label: string, result: { rate: number; successCount: number; 
   );
 }
 
-describeIntegration(`${SKILL_NAME} - Integration Tests`, () => {
+describeIntegration(`${SKILL_NAME}_ - Integration Tests`, () => {
   const agent = useAgentRunner();
 
   describe("skill-invocation", () => {
