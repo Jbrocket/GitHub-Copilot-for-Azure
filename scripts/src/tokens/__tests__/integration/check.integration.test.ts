@@ -91,4 +91,80 @@ describe("check command integration", () => {
     const output = consoleSpy.mock.calls.map((call: any) => call[0]).join("");
     expect(output).toContain("exceeding");
   });
+
+  it('checks a specific directory', () => {
+    const targetDir = join(TEST_DIR, 'custom-skill');
+    mkdirSync(targetDir, { recursive: true });
+    writeFileSync(join(targetDir, 'SKILL.md'), 'a'.repeat(100)); // small file, under limit
+
+    check(TEST_DIR, [targetDir]);
+
+    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Token Limit Check'));
+    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Files Checked: 1'));
+  });
+
+  it('checks multiple files in a target directory recursively', () => {
+    const targetDir = join(TEST_DIR, 'nested-skill');
+    mkdirSync(join(targetDir, 'references'), { recursive: true });
+    writeFileSync(join(targetDir, 'SKILL.md'), 'a'.repeat(100));
+    writeFileSync(join(targetDir, 'references', 'detail.md'), 'b'.repeat(100));
+
+    check(TEST_DIR, [targetDir]);
+
+    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Files Checked: 2'));
+  });
+
+  it('checks a single file target', () => {
+    const targetFile = join(TEST_DIR, '.github', 'skills', 'target.md');
+    writeFileSync(targetFile, 'single file content');
+
+    check(TEST_DIR, [targetFile]);
+
+    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Files Checked: 1'));
+  });
+
+  it('errors when target directory does not exist', () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const originalExitCode = process.exitCode;
+
+    check(TEST_DIR, [join(TEST_DIR, 'nonexistent')]);
+
+    expect(process.exitCode).toBe(1);
+    expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining('Path not found'));
+
+    process.exitCode = originalExitCode;
+    errorSpy.mockRestore();
+  });
+
+  it('checks directory with --json flag', () => {
+    const targetDir = join(TEST_DIR, 'json-dir');
+    mkdirSync(targetDir, { recursive: true });
+    writeFileSync(join(targetDir, 'doc.md'), 'test content');
+
+    check(TEST_DIR, [targetDir, '--json']);
+
+    const output = consoleSpy.mock.calls.map((call: any) => call[0]).join('');
+    const parsed = JSON.parse(output);
+    expect(parsed.totalFiles).toBe(1);
+  });
+
+  it('checks directory with --markdown flag', () => {
+    const targetDir = join(TEST_DIR, 'md-dir');
+    mkdirSync(targetDir, { recursive: true });
+    writeFileSync(join(targetDir, 'doc.md'), 'test content');
+
+    check(TEST_DIR, [targetDir, '--markdown']);
+
+    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('## 📊 Token Limit Check Report'));
+  });
+
+  it('handles directory with no markdown files', () => {
+    const targetDir = join(TEST_DIR, 'no-md');
+    mkdirSync(targetDir, { recursive: true });
+    writeFileSync(join(targetDir, 'script.ts'), 'console.log("test")');
+
+    check(TEST_DIR, [targetDir]);
+
+    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Files Checked: 0'));
+  });
 });

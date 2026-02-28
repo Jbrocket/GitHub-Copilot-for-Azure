@@ -4,7 +4,8 @@
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { join } from "node:path";
-import { mkdirSync, writeFileSync, rmSync, readFileSync } from "node:fs";
+import { mkdirSync, writeFileSync, rmSync, readFileSync, existsSync, statSync } from "node:fs";
+import { findMarkdownFiles } from '../commands/utils.js';
 
 const TEST_DIR = join(process.cwd(), "__test_fixtures_count__");
 
@@ -192,9 +193,119 @@ describe("count command", () => {
       const sorted = Object.entries(files)
         .sort(([, a], [, b]) => b.tokens - a.tokens);
 
-      expect(sorted[0][0]).toBe("large.md");
-      expect(sorted[1][0]).toBe("medium.md");
-      expect(sorted[2][0]).toBe("small.md");
+      expect(sorted[0][0]).toBe('large.md');
+      expect(sorted[1][0]).toBe('medium.md');
+      expect(sorted[2][0]).toBe('small.md');
+    });
+  });
+
+  describe('directory and file targeting', () => {
+    it('finds only markdown files in a specific directory', () => {
+      mkdirSync(join(TEST_DIR, 'skilldir'), { recursive: true });
+      writeFileSync(join(TEST_DIR, 'skilldir', 'SKILL.md'), '# Skill content');
+      writeFileSync(join(TEST_DIR, 'skilldir', 'README.md'), '# README');
+      writeFileSync(join(TEST_DIR, 'skilldir', 'script.ts'), 'console.log("test")');
+
+      const files = findMarkdownFiles(join(TEST_DIR, 'skilldir'));
+
+      expect(files.length).toBe(2);
+      expect(files.some(f => f.endsWith('SKILL.md'))).toBe(true);
+      expect(files.some(f => f.endsWith('README.md'))).toBe(true);
+      expect(files.some(f => f.endsWith('.ts'))).toBe(false);
+    });
+
+    it('finds markdown files recursively in nested directories', () => {
+      mkdirSync(join(TEST_DIR, 'skilldir', 'references'), { recursive: true });
+      writeFileSync(join(TEST_DIR, 'skilldir', 'SKILL.md'), '# Skill');
+      writeFileSync(join(TEST_DIR, 'skilldir', 'references', 'detail.md'), '# Detail');
+
+      const files = findMarkdownFiles(join(TEST_DIR, 'skilldir'));
+
+      expect(files.length).toBe(2);
+      expect(files.some(f => f.endsWith('SKILL.md'))).toBe(true);
+      expect(files.some(f => f.endsWith('detail.md'))).toBe(true);
+    });
+
+    it('distinguishes between directory and file targets', () => {
+      mkdirSync(join(TEST_DIR, 'mydir'), { recursive: true });
+      writeFileSync(join(TEST_DIR, 'mydir', 'file.md'), 'content');
+      writeFileSync(join(TEST_DIR, 'afile.md'), 'content');
+
+      // Directory target expands to contained markdown files
+      const dirFiles = findMarkdownFiles(join(TEST_DIR, 'mydir'));
+      expect(dirFiles.length).toBe(1);
+
+      // File target is identified as not a directory
+      expect(statSync(join(TEST_DIR, 'afile.md')).isDirectory()).toBe(false);
+    });
+
+    it('returns empty array for non-existent directory', () => {
+      const files = findMarkdownFiles(join(TEST_DIR, 'nonexistent'));
+      expect(files).toEqual([]);
+    });
+
+    it('returns empty array for directory with no markdown files', () => {
+      mkdirSync(join(TEST_DIR, 'nomd'), { recursive: true });
+      writeFileSync(join(TEST_DIR, 'nomd', 'script.ts'), 'code');
+      writeFileSync(join(TEST_DIR, 'nomd', 'data.json'), '{}');
+
+      const files = findMarkdownFiles(join(TEST_DIR, 'nomd'));
+      expect(files).toEqual([]);
+    });
+  });
+
+  describe('directory and file targeting', () => {
+    it('finds only markdown files in a specific directory', () => {
+      mkdirSync(join(TEST_DIR, 'skilldir'), { recursive: true });
+      writeFileSync(join(TEST_DIR, 'skilldir', 'SKILL.md'), '# Skill content');
+      writeFileSync(join(TEST_DIR, 'skilldir', 'README.md'), '# README');
+      writeFileSync(join(TEST_DIR, 'skilldir', 'script.ts'), 'console.log("test")');
+
+      const files = findMarkdownFiles(join(TEST_DIR, 'skilldir'));
+
+      expect(files.length).toBe(2);
+      expect(files.some(f => f.endsWith('SKILL.md'))).toBe(true);
+      expect(files.some(f => f.endsWith('README.md'))).toBe(true);
+      expect(files.some(f => f.endsWith('.ts'))).toBe(false);
+    });
+
+    it('finds markdown files recursively in nested directories', () => {
+      mkdirSync(join(TEST_DIR, 'skilldir', 'references'), { recursive: true });
+      writeFileSync(join(TEST_DIR, 'skilldir', 'SKILL.md'), '# Skill');
+      writeFileSync(join(TEST_DIR, 'skilldir', 'references', 'detail.md'), '# Detail');
+
+      const files = findMarkdownFiles(join(TEST_DIR, 'skilldir'));
+
+      expect(files.length).toBe(2);
+      expect(files.some(f => f.endsWith('SKILL.md'))).toBe(true);
+      expect(files.some(f => f.endsWith('detail.md'))).toBe(true);
+    });
+
+    it('distinguishes between directory and file targets', () => {
+      mkdirSync(join(TEST_DIR, 'mydir'), { recursive: true });
+      writeFileSync(join(TEST_DIR, 'mydir', 'file.md'), 'content');
+      writeFileSync(join(TEST_DIR, 'afile.md'), 'content');
+
+      // Directory target expands to contained markdown files
+      const dirFiles = findMarkdownFiles(join(TEST_DIR, 'mydir'));
+      expect(dirFiles.length).toBe(1);
+
+      // File target is identified as not a directory
+      expect(statSync(join(TEST_DIR, 'afile.md')).isDirectory()).toBe(false);
+    });
+
+    it('returns empty array for non-existent directory', () => {
+      const files = findMarkdownFiles(join(TEST_DIR, 'nonexistent'));
+      expect(files).toEqual([]);
+    });
+
+    it('returns empty array for directory with no markdown files', () => {
+      mkdirSync(join(TEST_DIR, 'nomd'), { recursive: true });
+      writeFileSync(join(TEST_DIR, 'nomd', 'script.ts'), 'code');
+      writeFileSync(join(TEST_DIR, 'nomd', 'data.json'), '{}');
+
+      const files = findMarkdownFiles(join(TEST_DIR, 'nomd'));
+      expect(files).toEqual([]);
     });
   });
 

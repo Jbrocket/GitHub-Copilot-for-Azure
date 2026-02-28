@@ -3,7 +3,7 @@
  */
 
 import { parseArgs } from "node:util";
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync, statSync } from "node:fs";
 import { join, relative, resolve, isAbsolute } from "node:path";
 import type { 
   TokenMetadata, 
@@ -80,6 +80,42 @@ function generateMetadata(rootDir: string, scanDirs: string[]): TokenMetadata {
   };
 }
 
+/**
+ * Generates token metadata from an explicit list of files.
+ * Used when a specific directory or file is provided as a positional argument.
+ * @param rootDir - Repository root directory
+ * @param files - List of absolute file paths to process
+ * @returns Token metadata for the given files
+ */
+function generateMetadataFromFiles(rootDir: string, files: string[]): TokenMetadata {
+  const fileTokens: Record<string, TokenCount> = {};
+  let totalTokens = 0;
+  let errorCount = 0;
+
+  for (const file of files) {
+    try {
+      const relativePath = relative(rootDir, file).replace(/[\\/]/g, '/');
+      const tokenCount = countFileTokens(file);
+      fileTokens[relativePath] = tokenCount;
+      totalTokens += tokenCount.tokens;
+    } catch (error) {
+      console.error(`⚠️  ${getErrorMessage(error)}`);
+      errorCount++;
+    }
+  }
+
+  if (errorCount > 0) {
+    console.error(`⚠️  Failed to process ${errorCount} file(s)`);
+  }
+
+  return {
+    generatedAt: new Date().toISOString(),
+    totalTokens,
+    totalFiles: files.length - errorCount,
+    files: fileTokens
+  };
+}
+
 function printSummary(metadata: TokenMetadata): void {
   console.log("\n📊 Token Count Summary");
   console.log("═".repeat(60));
@@ -131,7 +167,7 @@ function isPathWithinRoot(targetPath: string, rootDir: string): boolean {
 }
 
 export function count(rootDir: string, args: string[]): void {
-  const { values } = parseArgs({
+  const { values, positionals } = parseArgs({
     args,
     options: {
       output: { type: "string" },
@@ -144,7 +180,36 @@ export function count(rootDir: string, args: string[]): void {
   const outputPath = values.output ?? null;
   const jsonOnly = values.json ?? false;
 
-  const metadata = generateMetadata(rootDir, [...DEFAULT_SCAN_DIRS]);
+  const targetArg = positionals[0];
+  let metadata: TokenMetadata;
+
+  if (targetArg) {
+    const targetPath = resolve(rootDir, targetArg);
+    if (!existsSync(targetPath)) {
+      console.error(`❌ Path not found: ${targetPath}`);
+      process.exitCode = 1;
+      return;
+    }
+    try {
+      const files = statSync(targetPath).isDirectory()
+        ? findMarkdownFiles(targetPath)
+        : [targetPath];
+      metadata = generateMetadataFromFiles(rootDir, files);
+    } catch (error) {
+      const errMsg = getErrorMessage(error);
+      if (errMsg.includes('ENOENT')) {
+        console.error(`❌ Path does not exist: ${targetPath}`);
+      } else if (errMsg.includes('EACCES') || errMsg.includes('EPERM')) {
+        console.error(`❌ Permission denied accessing: ${targetPath}`);
+      } else {
+        console.error(`❌ Failed to access path ${targetPath}: ${errMsg}`);
+      }
+      process.exitCode = 1;
+      return;
+    }
+  } else {
+    metadata = generateMetadata(rootDir, [...DEFAULT_SCAN_DIRS]);
+  }
   
   if (outputPath && typeof outputPath === "string") {
     const fullOutputPath = isAbsolute(outputPath) 

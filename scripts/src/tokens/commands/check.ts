@@ -2,9 +2,9 @@
  * Check command - Token limit validation
  */
 
-import { parseArgs } from "node:util";
-import { readFileSync, existsSync } from "node:fs";
-import { join, relative, resolve } from "node:path";
+import { parseArgs } from 'node:util';
+import { readFileSync, existsSync, statSync } from 'node:fs';
+import { join, relative, resolve } from 'node:path';
 import type { 
   ValidationResult, 
   ValidationReport
@@ -130,7 +130,27 @@ export function check(rootDir: string, args: string[]): void {
   
   let filesToCheck: string[] | undefined;
   if (positionals.length > 0) {
-    filesToCheck = positionals.map(f => resolve(rootDir, f));
+    const expanded: string[] = [];
+    for (const f of positionals) {
+      const fullPath = resolve(rootDir, f);
+      if (!existsSync(fullPath)) {
+        console.error(`❌ Path not found: ${fullPath}`);
+        process.exitCode = 1;
+        return;
+      }
+      try {
+        if (statSync(fullPath).isDirectory()) {
+          expanded.push(...findMarkdownFiles(fullPath));
+        } else {
+          expanded.push(fullPath);
+        }
+      } catch (error) {
+        console.error(`❌ Failed to access path ${fullPath}: ${getErrorMessage(error)}`);
+        process.exitCode = 1;
+        return;
+      }
+    }
+    filesToCheck = expanded.length > 0 ? expanded : undefined;
   } else {
     // Default: scan only skill/agent directories
     const allFiles: string[] = [];
