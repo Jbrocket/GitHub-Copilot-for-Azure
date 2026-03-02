@@ -1,5 +1,5 @@
 /**
- * Unit Tests for azure-workload-planner
+ * Unit Tests for azure-infra-planner
  * 
  * Test isolated skill logic, validation rules, and reference data integrity.
  */
@@ -8,7 +8,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { loadSkill, LoadedSkill } from "../utils/skill-loader";
 
-const SKILL_NAME = "azure-workload-planner";
+const SKILL_NAME = "azure-infra-planner";
 
 describe(`${SKILL_NAME} - Unit Tests`, () => {
   let skill: LoadedSkill;
@@ -76,7 +76,7 @@ describe(`${SKILL_NAME} - Unit Tests`, () => {
       expect(skill.content).toContain("approved");
       expect(skill.content).toContain("deployed");
     });
-    
+
     test("documents plan-first workflow gate", () => {
       expect(skill.content).toContain("PLAN-FIRST WORKFLOW");
       expect(skill.content).toContain("STOP HERE");

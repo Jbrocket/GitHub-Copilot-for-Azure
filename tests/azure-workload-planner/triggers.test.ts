@@ -1,5 +1,5 @@
 /**
- * Trigger Tests for azure-workload-planner
+ * Trigger Tests for azure-infra-planner
  * 
  * Tests that verify the skill triggers on appropriate prompts
  * and does NOT trigger on unrelated prompts.
@@ -8,7 +8,7 @@
 import { TriggerMatcher } from "../utils/trigger-matcher";
 import { loadSkill, LoadedSkill } from "../utils/skill-loader";
 
-const SKILL_NAME = "azure-workload-planner";
+const SKILL_NAME = "azure-infra-planner";
 
 describe(`${SKILL_NAME} - Trigger Tests`, () => {
   let triggerMatcher: TriggerMatcher;

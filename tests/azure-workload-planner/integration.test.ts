@@ -1,5 +1,5 @@
 /**
- * Integration Tests for azure-workload-planner
+ * Integration Tests for azure-infra-planner
  * 
  * Tests skill behavior with a real Copilot agent session.
  * Runs prompts multiple times to measure skill invocation rate.
@@ -20,7 +20,7 @@ import {
   getIntegrationSkipReason
 } from "../utils/agent-runner";
 
-const SKILL_NAME = "azure-workload-planner";
+const SKILL_NAME = "azure-infra-planner";
 const RUNS_PER_PROMPT = 5;
 const EXPECTED_INVOCATION_RATE = 0.6; // 60% minimum invocation rate
 

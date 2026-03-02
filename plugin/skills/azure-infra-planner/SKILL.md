@@ -1,12 +1,12 @@
 ---
-name: azure-workload-planner
+name: azure-infra-planner
 description: |
   Plan, generate, and deploy Azure infrastructure from workload requirements or repository context. Produces a structured JSON infrastructure plan, generates Bicep or Terraform IaC, and executes deployment.
   USE FOR: create infrastructure plan, plan Azure infrastructure, generate Bicep templates, generate Terraform for Azure, deploy infrastructure, provision Azure resources, multi-environment infrastructure, workload planning, infrastructure as code, what Azure resources do I need, set up dev staging production.
   DO NOT USE FOR: application scaffolding or code generation (use azure-prepare), listing existing resources (use azure-resource-lookup), optimizing costs (use azure-cost-optimization).
 ---
 
-# Azure Workload Planner
+# Azure Infra Planner
 
 > **AUTHORITATIVE GUIDANCE — MANDATORY COMPLIANCE**
 >
