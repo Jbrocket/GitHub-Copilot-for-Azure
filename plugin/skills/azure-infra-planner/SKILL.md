@@ -42,7 +42,7 @@ Activate this skill when user wants to:
 > 1. **RESEARCH** — Gather requirements, check SKUs, regions, naming rules
 > 2. **PLAN** — Generate `.azure/infrastructure-plan.json` with status `draft`
 > 3. **CONFIRM** — Present the plan to the user; user sets status to `approved`
-> 4. **GENERATE** — Create Bicep or Terraform files from the approved plan
+> 4. **GENERATE** — Create Bicep or Terraform files from the approved plan in the root folder under `/infra`
 > 5. **DEPLOY** — Execute deployment commands only when status is `approved`
 
 ---
