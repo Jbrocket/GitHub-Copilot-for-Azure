@@ -1,0 +1,3 @@
+id: plan-three-tier-bicep
+inputs:
+  prompt: "Plan a 3-tier web application architecture on Azure with a React frontend hosted on Static Web Apps, a Node.js API layer on App Service, and Azure Database for PostgreSQL. I want to use Bicep for the infrastructure as code. Include a CDN for static assets and Application Gateway for load balancing across the API tier."
