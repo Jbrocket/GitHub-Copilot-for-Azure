@@ -4,10 +4,12 @@ skill: azure-infra-planner
 version: "1.0"
 config:
   trials_per_task: 1
-  timeout_seconds: 420
+  timeout_seconds: 600
   parallel: false
   executor: copilot-sdk
   model: claude-opus-4.6
+  skill_directories:
+    - ".."
 graders:
   - type: text
     name: no_fatal_errors
@@ -17,7 +19,8 @@ graders:
   - type: prompt
     name: response_quality
     config:
-      model: gpt-4o-mini
+      model: claude-opus-4.6
+      continue_session: true
       prompt: |
         You are evaluating an AI agent that has the azure-infra-planner skill. Review the original user prompt and the agent's response.
 
