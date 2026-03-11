@@ -78,8 +78,9 @@ Call the following tools to retrieve the latest documentation and best practices
 | Order | Tool | Parameters | Purpose |
 |-------|------|------------|---------|
 | 1 | `get_azure_bestpractices` | resource: `general`, action: `all` | Baseline for WAF conformance and deployment viability |
-| 2 | `deploy_iac_rules_get` | `resource-types` per resource (e.g., `appservice`, `storage`) | Resource-specific mandatory rules |
-| 3 | `azure-documentation` | Resource type + "best practices" | Cover resources not in `deploy_iac_rules_get` (e.g., Cosmos DB, Key Vault) |
+| 2 | `wellarchitectedframework_serviceguide_get` | `service` per resource type | Per-service WAF guidance. Returns a raw markdown URL. For each resource, spawn a sub-agent with the guide URL and the **full plan JSON** to evaluate conformance in context. Falls back to step 4 if no guide exists. |
+| 3 | `deploy_iac_rules_get` | `resource-types` per resource (e.g., `appservice`, `storage`) | Resource-specific mandatory rules |
+| 4 | `azure-documentation` | Resource type + "best practices" | Cover resources not in `deploy_iac_rules_get` or without a WAF service guide |
 
 ## References
 

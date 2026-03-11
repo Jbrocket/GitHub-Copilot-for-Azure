@@ -29,7 +29,8 @@ Does the plan follow Azure Well-Architected Framework principles?
 > | Tool | Parameters | Purpose |
 > |------|------------|---------|
 > | `get_azure_bestpractices` | resource: `general`, action: `all` | Retrieve current WAF pillar best practices |
-> | `azure-documentation` | query: `"Well-Architected Framework"` + pillar name | Deep-dive into specific WAF pillars for the workload |
+> | `wellarchitectedframework_serviceguide_get` | `service` per resource type | Per-service WAF guidance. Returns a raw markdown URL. For each resource, spawn a sub-agent with the guide URL and the **full plan JSON** to evaluate WAF conformance in context (cross-resource recommendations like private endpoints, VNet integration matter). Falls back to `azure-documentation` if no guide exists. |
+> | `azure-documentation` | query: service name + specific topic | Pairing constraints, config checks, and WAF guidance for services without a dedicated guide |
 >
 > Reference the tool output for up-to-date WAF criteria rather than relying solely on the checklist above.
 
