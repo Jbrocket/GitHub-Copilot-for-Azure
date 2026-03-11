@@ -41,6 +41,13 @@ git stash && git checkout main
 npx jest --testPathPattern "azure-infra-planner/golden-eval" --no-coverage
 ```
 
+You can also use `EXCLUDED_TOOLS` to exclude the WAF tool from Phase 1 (planner) only. Phase 2 (plan-eval) always has full tool access regardless of this setting:
+
+```bash
+$env:EXCLUDED_TOOLS="azure-wellarchitectedframework"
+npx jest --testPathPattern "azure-infra-planner/golden-eval" --no-coverage
+```
+
 Compare `artifacts/<row>/<model>/plan-evaluation.json` across runs, especially `wafConformance` scores.
 
 ## Other Tests

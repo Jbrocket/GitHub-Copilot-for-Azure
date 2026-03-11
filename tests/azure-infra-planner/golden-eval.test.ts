@@ -160,6 +160,7 @@ describeIntegration(`${SKILL_NAME} - Golden Eval`, () => {
           "hardDependencies, and deployable.",
         nonInteractive: true,
         model: EVAL_JUDGE_MODEL,
+        excludedTools: [], // plan-eval always needs full tool access (esp. WAF tool)
         preserveWorkspace: true,
         setup: async (workspace: string) => {
           evalWorkspace = workspace;
