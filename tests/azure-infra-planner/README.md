@@ -30,24 +30,15 @@ $env:EVAL_MODELS="claude-opus-4.6,gpt-4.1,claude-sonnet-4"
 npx jest --testPathPattern "azure-infra-planner/golden-eval" --no-coverage
 ```
 
-### With vs. without WAF tool
+### Custom artifact directory
 
-Use `EXCLUDED_TOOLS` to exclude the WAF tool from Phase 1 (planner) only — Phase 2 (plan-eval) always has full tool access. Use `EVAL_ARTIFACT_DIR` to write results to separate folders so runs can happen in parallel:
+Use `EVAL_ARTIFACT_DIR` to write results to a custom folder:
 
 ```bash
-# Terminal 1: With WAF tool → artifacts-waf/
 $env:NODE_OPTIONS="--experimental-vm-modules"
-$env:EVAL_ARTIFACT_DIR="artifacts-waf"
-npx jest --testPathPattern "azure-infra-planner/golden-eval" --no-coverage
-
-# Terminal 2: Without WAF tool → artifacts-nowaf/
-$env:NODE_OPTIONS="--experimental-vm-modules"
-$env:EXCLUDED_TOOLS="azure-wellarchitectedframework"
-$env:EVAL_ARTIFACT_DIR="artifacts-nowaf"
+$env:EVAL_ARTIFACT_DIR="artifacts-run1"
 npx jest --testPathPattern "azure-infra-planner/golden-eval" --no-coverage
 ```
-
-Compare `<artifact-dir>/<row>/<model>/plan-evaluation.json` across runs, especially `wafConformance` scores.
 
 ## Other Tests
 

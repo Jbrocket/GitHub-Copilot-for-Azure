@@ -59,9 +59,7 @@ if (skipTests && skipReason) {
   console.log(`⏭️  Skipping golden eval tests: ${skipReason}`);
 }
 
-const wafExcluded = (process.env.EXCLUDED_TOOLS || "").includes("azure-wellarchitectedframework");
-console.log(`\n🔧 WAF tool: ${wafExcluded ? "❌ EXCLUDED (Phase 1 only)" : "✅ ENABLED"}`);
-console.log(`📂 Artifacts: ${process.env.EVAL_ARTIFACT_DIR || "artifacts"}\n`);
+console.log(`\n📂 Artifacts: ${process.env.EVAL_ARTIFACT_DIR || "artifacts"}\n`);
 
 const describeIntegration = skipTests ? describe.skip : describe;
 
@@ -164,7 +162,7 @@ describeIntegration(`${SKILL_NAME} - Golden Eval`, () => {
           "hardDependencies, and deployable.",
         nonInteractive: true,
         model: EVAL_JUDGE_MODEL,
-        excludedTools: [], // plan-eval always needs full tool access (esp. WAF tool)
+        excludedTools: [],
         preserveWorkspace: true,
         setup: async (workspace: string) => {
           evalWorkspace = workspace;
