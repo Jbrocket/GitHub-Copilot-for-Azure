@@ -113,6 +113,12 @@ export interface AgentRunConfig {
    * If undefined, all the skills in azure plugin will be included.
    */
   includeSkills?: string[];
+
+  /**
+   * Model to use for this specific run.
+   * Takes precedence over MODEL_OVERRIDE env var.
+   */
+  model?: string;
 }
 
 interface KeywordOptions {
@@ -518,7 +524,7 @@ export function useAgentRunner() {
       }
 
       const session = await client.createSession({
-        model: modelOverride || "claude-sonnet-4.5",
+        model: config.model || modelOverride || "claude-sonnet-4.5",
         onPermissionRequest: approveAll,
         skillDirectories: [skillDirectory],
         disabledSkills: disabledSkills,
@@ -573,7 +579,7 @@ export function useAgentRunner() {
         cacheWriteTokens: 0,
         totalApiDurationMs: 0,
         apiCallCount: 0,
-        model: modelOverride || "claude-sonnet-4.5",
+        model: config.model || modelOverride || "claude-sonnet-4.5",
         perCallUsage: [],
       };
 
