@@ -1,0 +1,140 @@
+{
+  "meta": {
+    "schemaVersion": "1.0.0",
+    "status": "draft",
+    "lastUpdated": "2026-03-11T13:18:00Z"
+  },
+  "project": {
+    "name": "doc-qa-api",
+    "description": "Real-time document Q&A API leveraging Azure OpenAI and Azure Cosmos DB with API Management",
+    "location": "eastus"
+  },
+  "resources": [
+    {
+      "name": "rg-doc-qa-api",
+      "type": "Microsoft.Resources/resourceGroups",
+      "sku": {
+        "name": "Standard"
+      },
+      "properties": {
+        "location": "eastus"
+      }
+    },
+    {
+      "name": "cosmos-doc-qa",
+      "type": "Microsoft.DocumentDB/databaseAccounts",
+      "dependencies": ["rg-doc-qa-api"],
+      "sku": {
+        "name": "Standard_Serverless"
+      },
+      "properties": {
+        "databaseAccountOfferType": "Standard",
+        "locations": [
+          {
+            "locationName": "eastus",
+            "failoverPriority": 0
+          }
+        ],
+        "capabilities": [
+          {
+            "name": "EnableServerless"
+          }
+        ]
+      }
+    },
+    {
+      "name": "openai-doc-qa",
+      "type": "Microsoft.CognitiveServices/accounts",
+      "dependencies": ["rg-doc-qa-api"],
+      "sku": {
+        "name": "S0"
+      },
+      "properties": {
+        "kind": "OpenAI",
+        "customSubDomainName": "openai-doc-qa-unique-123",
+        "deployments": [
+          {
+            "name": "gpt-35-turbo",
+            "model": "gpt-35-turbo",
+            "version": "0301"
+          },
+          {
+            "name": "text-embedding-ada-002",
+            "model": "text-embedding-ada-002",
+            "version": "2"
+          }
+        ]
+      }
+    },
+    {
+      "name": "log-doc-qa",
+      "type": "Microsoft.OperationalInsights/workspaces",
+      "dependencies": ["rg-doc-qa-api"],
+      "sku": {
+        "name": "PerGB2018"
+      },
+      "properties": {
+        "retentionInDays": 30
+      }
+    },
+    {
+      "name": "env-doc-qa",
+      "type": "Microsoft.App/managedEnvironments",
+      "dependencies": ["rg-doc-qa-api", "log-doc-qa"],
+      "sku": {
+        "name": "Consumption"
+      },
+      "properties": {
+        "appLogsConfiguration": {
+          "destination": "log-analytics",
+          "logAnalyticsConfiguration": {
+            "customerId": "[reference(resourceId('Microsoft.OperationalInsights/workspaces', 'log-doc-qa'), '2020-08-01').customerId]",
+            "sharedKey": "[listKeys(resourceId('Microsoft.OperationalInsights/workspaces', 'log-doc-qa'), '2020-08-01').primarySharedKey]"
+          }
+        }
+      }
+    },
+    {
+      "name": "app-doc-qa-api",
+      "type": "Microsoft.App/containerApps",
+      "dependencies": ["rg-doc-qa-api", "env-doc-qa", "cosmos-doc-qa", "openai-doc-qa"],
+      "properties": {
+        "managedEnvironmentId": "[resourceId('Microsoft.App/managedEnvironments', 'env-doc-qa')]",
+        "configuration": {
+          "ingress": {
+            "external": true,
+            "targetPort": 80
+          }
+        },
+        "template": {
+          "containers": [
+            {
+              "name": "api",
+              "image": "mcr.microsoft.com/azuredocs/containerapps-helloworld:latest",
+              "resources": {
+                "cpu": 0.5,
+                "memory": "1.0Gi"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "apim-doc-qa",
+      "type": "Microsoft.ApiManagement/service",
+      "dependencies": ["rg-doc-qa-api", "app-doc-qa-api"],
+      "sku": {
+        "name": "Consumption",
+        "capacity": 0
+      },
+      "properties": {
+        "publisherEmail": "admin@contoso.com",
+        "publisherName": "Contoso",
+        "policy": {
+          "content": "<policies><inbound><rate-limit-by-key calls=\"100\" renewal-period=\"60\" counter-key=\"@(context.Subscription.Id)\" /></inbound></policies>"
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,33 @@
+{
+  "overallScore": 0.86,
+  "dimensions": {
+    "goalAlignment": 0.92,
+    "wafConformance": 0.72,
+    "dependencyCompleteness": 0.95,
+    "deploymentViability": 0.85
+  },
+  "risks": [
+    "Cosmos DB serverless is restricted to a single Azure region; no multi-region failover is possible, reducing reliability for a production Q&A API",
+    "No VNet integration or private endpoints configured for any resource; Azure OpenAI, Cosmos DB, Key Vault, and APIM are all publicly accessible",
+    "Container App references image from docqaregistry.azurecr.io but no Azure Container Registry resource is included in the plan",
+    "Key Vault has publicNetworkAccess set to Enabled, which expands the attack surface beyond what managed identity alone mitigates",
+    "No availability zone redundancy configured for any resource in the plan",
+    "Container Apps environment appLogsConfiguration specifies log-analytics destination but does not include the workspaceResourceId linking to the Log Analytics workspace",
+    "APIM Basic SKU does not include built-in VNet integration; upgrading to Standard or Premium would be needed for network-isolated deployments",
+    "No explicit RBAC role assignments defined for the managed identity to access Azure OpenAI, Cosmos DB, or Key Vault data planes"
+  ],
+  "correctionsRecommended": [
+    "Add an Azure Container Registry resource and configure the Container App with registry credentials or managed identity-based AcrPull role assignment",
+    "Add private endpoints for Cosmos DB, Azure OpenAI, and Key Vault to restrict data-plane access to the VNet",
+    "Include RBAC role assignment resources granting the user-assigned managed identity Cognitive Services OpenAI User, Cosmos DB Built-in Data Contributor, and Key Vault Secrets User roles",
+    "Set workspaceResourceId on the Container Apps environment appLogsConfiguration to connect logs to the Log Analytics workspace",
+    "Consider adding a Container Registry resource with managed identity pull to avoid image pull failures at deployment time",
+    "Evaluate enabling availability zones on the Container Apps environment and APIM for improved reliability",
+    "Add resource tags for cost tracking, environment identification, and operational governance",
+    "Set Key Vault publicNetworkAccess to Disabled once private endpoint connectivity is established"
+  ],
+  "hardDependencies": [
+    "Container App image pull requires a reachable container registry (docqaregistry.azurecr.io) with the docqa-api:latest image available; registry is not provisioned in this plan"
+  ],
+  "deployable": 1
+}

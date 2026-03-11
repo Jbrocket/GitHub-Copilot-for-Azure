@@ -1,0 +1,343 @@
+{
+  "meta": {
+    "planId": "plan-ecommerce-aks-001",
+    "generatedAt": "2026-03-11T12:49:24.870Z",
+    "version": "0.1-draft",
+    "status": "draft"
+  },
+  "inputs": {
+    "userGoal": "Deploy a microservices-based e-commerce backend with independent catalog, order, and payment services on AKS with Helm for deployments and Istio service mesh for traffic control."
+  },
+  "plan": {
+    "architecturePrinciples": [
+      "Microservices independence — each service owns its data and can be deployed, scaled, and updated independently",
+      "Service mesh for traffic control — Istio manages mTLS, retries, circuit breaking, and canary deployments",
+      "Zero-trust networking — all inter-service communication encrypted via Istio mTLS",
+      "Observable by default — centralized logging, metrics, and distributed tracing via Container Insights",
+      "Secrets managed externally — Key Vault with CSI driver, no secrets in Helm values or environment variables",
+      "Infrastructure as Code — all resources defined in Bicep for repeatable deployments"
+    ],
+    "resources": [
+      {
+        "name": "vnet-ecommerce-prod-eastus-001",
+        "type": "Microsoft.Network/virtualNetworks",
+        "location": "eastus",
+        "sku": "N/A",
+        "properties": {
+          "addressSpace": {
+            "addressPrefixes": ["10.0.0.0/16"]
+          }
+        },
+        "reasoning": {
+          "whyChosen": "Provides network isolation for all workload resources. AKS with Azure CNI Overlay requires a VNet. A /16 address space provides ample room for AKS nodes, private endpoints, and future growth.",
+          "alternativesConsidered": ["Deploy without VNet using kubenet with public IPs only"],
+          "tradeoffs": "Adds networking complexity but enables private connectivity, NSGs, and network policy enforcement."
+        },
+        "dependencies": [],
+        "dependencyReasoning": "Foundation resource — no dependencies.",
+        "references": [
+          { "title": "Virtual Network overview", "url": "https://learn.microsoft.com/azure/virtual-network/virtual-networks-overview" },
+          { "title": "VNet planning", "url": "https://learn.microsoft.com/azure/virtual-network/virtual-network-vnet-plan-design-arm" }
+        ]
+      },
+      {
+        "name": "snet-aks-001",
+        "type": "Microsoft.Network/virtualNetworks/subnets",
+        "location": "eastus",
+        "sku": "N/A",
+        "properties": {
+          "addressPrefix": "10.0.0.0/22"
+        },
+        "reasoning": {
+          "whyChosen": "Dedicated /22 subnet for AKS nodes (1,024 IPs). With CNI Overlay, only node IPs consume subnet addresses (pods get overlay IPs), so /22 supports up to ~1,000 nodes.",
+          "alternativesConsidered": ["/24 subnet (256 IPs — sufficient for small clusters)"],
+          "tradeoffs": "Larger subnet reserves more IP space but provides headroom for scaling node pools."
+        },
+        "dependencies": ["vnet-ecommerce-prod-eastus-001"],
+        "dependencyReasoning": "Subnet is a child resource of the VNet.",
+        "references": [
+          { "title": "Subnet management", "url": "https://learn.microsoft.com/azure/virtual-network/virtual-network-manage-subnet" }
+        ]
+      },
+      {
+        "name": "snet-privateendpoints-001",
+        "type": "Microsoft.Network/virtualNetworks/subnets",
+        "location": "eastus",
+        "sku": "N/A",
+        "properties": {
+          "addressPrefix": "10.0.8.0/24",
+          "privateEndpointNetworkPolicies": "Disabled"
+        },
+        "reasoning": {
+          "whyChosen": "Dedicated subnet for private endpoints to Cosmos DB, Redis, Key Vault, and ACR. Keeps private endpoint traffic isolated from AKS node traffic.",
+          "alternativesConsidered": ["Place private endpoints in the AKS subnet"],
+          "tradeoffs": "Additional subnet to manage, but cleaner network segmentation and NSG control."
+        },
+        "dependencies": ["vnet-ecommerce-prod-eastus-001"],
+        "dependencyReasoning": "Subnet is a child resource of the VNet.",
+        "references": [
+          { "title": "Private endpoints overview", "url": "https://learn.microsoft.com/azure/private-link/private-endpoint-overview" }
+        ]
+      },
+      {
+        "name": "log-ecommerce-prod-001",
+        "type": "Microsoft.OperationalInsights/workspaces",
+        "location": "eastus",
+        "sku": "PerGB2018",
+        "properties": {
+          "retentionInDays": 30
+        },
+        "reasoning": {
+          "whyChosen": "Required for AKS Container Insights addon. Centralizes logs from all three microservices, Istio sidecar telemetry, and AKS control plane diagnostics. PerGB2018 is the recommended pay-as-you-go tier.",
+          "alternativesConsidered": ["Third-party logging (Datadog, Elastic) — adds external dependency"],
+          "tradeoffs": "30-day retention keeps costs low; increase to 90 days if compliance requires longer retention."
+        },
+        "dependencies": [],
+        "dependencyReasoning": "Independent resource — created early so AKS can reference it.",
+        "references": [
+          { "title": "Log Analytics overview", "url": "https://learn.microsoft.com/azure/azure-monitor/logs/log-analytics-overview" },
+          { "title": "Container Insights", "url": "https://learn.microsoft.com/azure/azure-monitor/containers/container-insights-overview" }
+        ]
+      },
+      {
+        "name": "id-aks-ecommerce-prod-001",
+        "type": "Microsoft.ManagedIdentity/userAssignedIdentities",
+        "location": "eastus",
+        "sku": "N/A",
+        "properties": {},
+        "reasoning": {
+          "whyChosen": "User-assigned managed identity for AKS to authenticate to ACR (acrPull), Key Vault (secrets CSI driver), and other Azure services without storing credentials. Preferred over system-assigned for portability across cluster recreations.",
+          "alternativesConsidered": ["System-assigned managed identity — simpler but tied to cluster lifecycle"],
+          "tradeoffs": "Slightly more setup (explicit role assignments) but survives cluster recreates and can be shared."
+        },
+        "dependencies": [],
+        "dependencyReasoning": "Independent identity resource.",
+        "references": [
+          { "title": "Managed identities overview", "url": "https://learn.microsoft.com/entra/identity/managed-identities-azure-resources/overview" },
+          { "title": "AKS managed identity", "url": "https://learn.microsoft.com/azure/aks/use-managed-identity" }
+        ]
+      },
+      {
+        "name": "creaboringcommerceprod001",
+        "type": "Microsoft.ContainerRegistry/registries",
+        "location": "eastus",
+        "sku": "Premium",
+        "properties": {
+          "adminUserEnabled": false,
+          "publicNetworkAccess": "Enabled"
+        },
+        "reasoning": {
+          "whyChosen": "Premium SKU supports private link, geo-replication, and zone redundancy for production workloads. Stores container images for catalog, order, and payment services deployed via Helm. Admin user disabled — AKS uses managed identity with acrPull role.",
+          "alternativesConsidered": ["Standard SKU (cheaper, no private link or geo-replication)"],
+          "tradeoffs": "Higher cost than Standard but enables private endpoints and geo-replication when needed."
+        },
+        "dependencies": ["id-aks-ecommerce-prod-001"],
+        "dependencyReasoning": "AKS managed identity needs acrPull role assignment on this registry.",
+        "references": [
+          { "title": "Container Registry overview", "url": "https://learn.microsoft.com/azure/container-registry/container-registry-intro" },
+          { "title": "ACR SKU tiers", "url": "https://learn.microsoft.com/azure/container-registry/container-registry-skus" }
+        ]
+      },
+      {
+        "name": "kv-ecommerce-prod-001",
+        "type": "Microsoft.KeyVault/vaults",
+        "location": "eastus",
+        "sku": "standard",
+        "properties": {
+          "enableSoftDelete": true,
+          "enablePurgeProtection": true,
+          "enableRbacAuthorization": true,
+          "softDeleteRetentionInDays": 90,
+          "tenantId": "[subscription().tenantId]"
+        },
+        "reasoning": {
+          "whyChosen": "Centralized secret management for database connection strings, API keys, and payment service credentials. RBAC authorization is preferred over access policies for AKS CSI driver integration. Soft delete and purge protection enabled for data safety.",
+          "alternativesConsidered": ["Kubernetes Secrets only — less secure, no audit trail, secrets stored in etcd"],
+          "tradeoffs": "Adds a dependency on Azure service but provides audit logging, rotation support, and RBAC-controlled access."
+        },
+        "dependencies": ["id-aks-ecommerce-prod-001"],
+        "dependencyReasoning": "AKS managed identity needs Key Vault Secrets User role on this vault.",
+        "references": [
+          { "title": "Key Vault overview", "url": "https://learn.microsoft.com/azure/key-vault/general/overview" },
+          { "title": "AKS Key Vault CSI driver", "url": "https://learn.microsoft.com/azure/aks/csi-secrets-store-driver" }
+        ]
+      },
+      {
+        "name": "cosmos-ecommerce-prod-001",
+        "type": "Microsoft.DocumentDB/databaseAccounts",
+        "subtype": "NoSQL API",
+        "location": "eastus",
+        "sku": "Standard",
+        "properties": {
+          "databaseAccountOfferType": "Standard",
+          "kind": "GlobalDocumentDB",
+          "consistencyPolicy": {
+            "defaultConsistencyLevel": "Session"
+          },
+          "locations": [
+            {
+              "locationName": "eastus",
+              "failoverPriority": 0,
+              "isZoneRedundant": true
+            }
+          ],
+          "enableAutomaticFailover": true,
+          "publicNetworkAccess": "Enabled"
+        },
+        "reasoning": {
+          "whyChosen": "Cosmos DB NoSQL API provides low-latency reads/writes ideal for e-commerce catalog browsing and order processing. Session consistency balances performance and correctness — users see their own writes immediately. Zone redundancy enabled for high availability. Each microservice (catalog, order, payment) gets its own database/container within the account.",
+          "alternativesConsidered": [
+            "Azure SQL Database — relational but less flexible schema for catalog items",
+            "PostgreSQL Flexible Server — strong consistency by default but higher latency for global reads"
+          ],
+          "tradeoffs": "Higher per-request cost than relational databases, but automatic indexing, elastic scale, and sub-10ms latency justify cost for e-commerce read-heavy workloads."
+        },
+        "dependencies": [],
+        "dependencyReasoning": "Independent data tier — AKS services connect via connection string stored in Key Vault.",
+        "references": [
+          { "title": "Cosmos DB overview", "url": "https://learn.microsoft.com/azure/cosmos-db/introduction" },
+          { "title": "Consistency levels", "url": "https://learn.microsoft.com/azure/cosmos-db/consistency-levels" },
+          { "title": "Cosmos DB for e-commerce", "url": "https://learn.microsoft.com/azure/architecture/solution-ideas/articles/retail-and-e-commerce-using-cosmos-db" }
+        ]
+      },
+      {
+        "name": "redis-ecommerce-prod-001",
+        "type": "Microsoft.Cache/redis",
+        "location": "eastus",
+        "sku": "Standard_C2",
+        "properties": {
+          "sku": {
+            "name": "Standard",
+            "family": "C",
+            "capacity": 2
+          },
+          "enableNonSslPort": false,
+          "minimumTlsVersion": "1.2",
+          "redisConfiguration": {
+            "maxmemory-policy": "allkeys-lru"
+          },
+          "publicNetworkAccess": "Enabled"
+        },
+        "reasoning": {
+          "whyChosen": "Standard C2 (2.5 GB) provides SLA-backed caching for catalog product data, shopping cart sessions, and order state. allkeys-lru eviction policy ensures hot data stays cached. TLS 1.2 enforced. Standard tier provides replication for high availability.",
+          "alternativesConsidered": [
+            "Premium SKU — supports VNet injection and clustering but unnecessary at initial scale",
+            "In-cluster Redis (Helm chart) — no SLA, operational burden on team"
+          ],
+          "tradeoffs": "Managed service costs more than self-hosted Redis but eliminates operational overhead and provides built-in replication."
+        },
+        "dependencies": [],
+        "dependencyReasoning": "Independent caching tier — connection string stored in Key Vault.",
+        "references": [
+          { "title": "Azure Cache for Redis overview", "url": "https://learn.microsoft.com/azure/azure-cache-for-redis/cache-overview" },
+          { "title": "Redis Cache tiers", "url": "https://learn.microsoft.com/azure/azure-cache-for-redis/cache-overview#service-tiers" }
+        ]
+      },
+      {
+        "name": "aks-ecommerce-prod-001",
+        "type": "Microsoft.ContainerService/managedClusters",
+        "location": "eastus",
+        "sku": "Base/Standard",
+        "properties": {
+          "sku": {
+            "name": "Base",
+            "tier": "Standard"
+          },
+          "kubernetesVersion": "1.31",
+          "dnsPrefix": "aks-ecommerce-prod",
+          "networkProfile": {
+            "networkPlugin": "azure",
+            "networkPluginMode": "overlay",
+            "networkPolicy": "cilium",
+            "serviceCidr": "10.1.0.0/16",
+            "dnsServiceIP": "10.1.0.10",
+            "podCidr": "10.244.0.0/16"
+          },
+          "agentPoolProfiles": [
+            {
+              "name": "systempool",
+              "mode": "System",
+              "vmSize": "Standard_DS2_v2",
+              "count": 3,
+              "enableAutoScaling": true,
+              "minCount": 3,
+              "maxCount": 5,
+              "availabilityZones": ["1", "2", "3"],
+              "osDiskSizeGB": 128
+            },
+            {
+              "name": "userpool",
+              "mode": "User",
+              "vmSize": "Standard_DS3_v2",
+              "count": 3,
+              "enableAutoScaling": true,
+              "minCount": 3,
+              "maxCount": 10,
+              "availabilityZones": ["1", "2", "3"],
+              "osDiskSizeGB": 128
+            }
+          ],
+          "serviceMeshProfile": {
+            "mode": "Istio",
+            "istio": {
+              "components": {
+                "ingressGateways": [
+                  {
+                    "enabled": true,
+                    "mode": "External"
+                  }
+                ]
+              }
+            }
+          },
+          "addonProfiles": {
+            "omsagent": {
+              "enabled": true,
+              "config": {
+                "logAnalyticsWorkspaceResourceID": "[resourceId('Microsoft.OperationalInsights/workspaces', 'log-ecommerce-prod-001')]"
+              }
+            },
+            "azureKeyvaultSecretsProvider": {
+              "enabled": true
+            }
+          }
+        },
+        "reasoning": {
+          "whyChosen": "AKS Standard tier provides 99.95% SLA with availability zones — required for production e-commerce. Azure CNI Overlay avoids subnet IP exhaustion while providing full CNI features. Cilium network policy integrates with Istio for fine-grained traffic control. Istio service mesh addon is managed by AKS — no manual Istio installation. System pool (DS2_v2 × 3) runs CoreDNS and Istio control plane; User pool (DS3_v2 × 3-10) runs catalog/order/payment services with autoscaling. Key Vault CSI driver addon enables secretless access to Azure secrets.",
+          "alternativesConsidered": [
+            "Azure Container Apps — simpler but less control over service mesh, networking, and Helm deployments",
+            "AKS Free tier — no SLA, not suitable for production e-commerce",
+            "Linkerd service mesh — lighter weight but not managed by AKS, requires manual lifecycle management"
+          ],
+          "tradeoffs": "Higher operational complexity than Container Apps but provides full Kubernetes control, Helm-based GitOps, Istio traffic policies, and fine-grained autoscaling."
+        },
+        "dependencies": [
+          "snet-aks-001",
+          "log-ecommerce-prod-001",
+          "id-aks-ecommerce-prod-001",
+          "creaboringcommerceprod001",
+          "kv-ecommerce-prod-001"
+        ],
+        "dependencyReasoning": "AKS requires: subnet for node placement, Log Analytics for Container Insights, managed identity for ACR pull and Key Vault access, ACR for container images, Key Vault for the secrets CSI driver.",
+        "references": [
+          { "title": "AKS overview", "url": "https://learn.microsoft.com/azure/aks/intro-kubernetes" },
+          { "title": "AKS Istio service mesh addon", "url": "https://learn.microsoft.com/azure/aks/istio-about" },
+          { "title": "AKS networking concepts", "url": "https://learn.microsoft.com/azure/aks/concepts-network" },
+          { "title": "CNI Overlay networking", "url": "https://learn.microsoft.com/azure/aks/azure-cni-overlay" },
+          { "title": "AKS best practices", "url": "https://learn.microsoft.com/azure/aks/best-practices" }
+        ]
+      }
+    ],
+    "overallReasoning": {
+      "summary": "This architecture deploys three independent e-commerce microservices (catalog, order, payment) on AKS with Helm chart deployments and Istio service mesh for traffic management. Each service connects to shared Cosmos DB (with per-service databases/containers) for persistence and Redis for caching. Key Vault stores all secrets, accessed via the CSI driver. The Istio service mesh provides mTLS encryption, traffic splitting for canary deployments, circuit breaking for resilience, and observability via Container Insights integration. Azure CNI Overlay is chosen to avoid IP exhaustion while maintaining full CNI capability.",
+      "tradeoffs": "AKS + Istio provides maximum flexibility for traffic control and deployment strategies but has a steeper learning curve than simpler platforms like Container Apps. Cosmos DB's pay-per-request model can be expensive under high write throughput — monitor RU consumption and consider provisioned throughput if usage is predictable. The architecture is single-region; add geo-replication for Cosmos DB and a second AKS cluster behind Azure Front Door for multi-region HA if required."
+    },
+    "validation": "All resources deploy to eastus. AKS CNI Overlay pod CIDR (10.244.0.0/16) does not overlap with VNet (10.0.0.0/16) or service CIDR (10.1.0.0/16). AKS subnet (10.0.0.0/22) and private endpoints subnet (10.0.8.0/24) do not overlap. ACR uses Premium SKU compatible with acrPull role assignment. Key Vault uses RBAC authorization compatible with AKS CSI driver. Redis Standard tier uses family C as required. Cosmos DB Session consistency is compatible with single-region deployment. System pool meets the minimum requirement of at least one System mode pool.",
+    "references": [
+      { "title": "Microservices architecture on AKS", "url": "https://learn.microsoft.com/azure/architecture/reference-architectures/containers/aks-microservices/aks-microservices" },
+      { "title": "AKS baseline architecture", "url": "https://learn.microsoft.com/azure/architecture/reference-architectures/containers/aks/baseline-aks" },
+      { "title": "E-commerce with Cosmos DB", "url": "https://learn.microsoft.com/azure/architecture/solution-ideas/articles/retail-and-e-commerce-using-cosmos-db" },
+      { "title": "Istio service mesh on AKS", "url": "https://learn.microsoft.com/azure/aks/istio-about" }
+    ]
+  }
+}

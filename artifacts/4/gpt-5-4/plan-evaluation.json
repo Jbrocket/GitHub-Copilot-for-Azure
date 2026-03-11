@@ -1,0 +1,27 @@
+{
+  "overallScore": 0.87,
+  "dimensions": {
+    "goalAlignment": 0.95,
+    "wafConformance": 0.78,
+    "dependencyCompleteness": 0.82,
+    "deploymentViability": 0.92
+  },
+  "risks": [
+    "No monitoring or diagnostics resources included — no Log Analytics workspace, Application Insights, or diagnostic settings for any resource",
+    "SQL MI General Purpose tier with zoneRedundant: false limits database-tier high availability to single-zone",
+    "No autoscale configuration for the application tier VMSS (vmss-app-prod-001), only the web tier has autoscale",
+    "Presentation tier uses L4 Load Balancer only — no WAF, SSL offload, or URL-based routing protection",
+    "App tier VMSS (vmss-app-prod-001) is not explicitly linked to the internal LB (lbi-app-prod-001) backend pool in its network profile",
+    "No explicit RBAC role assignment resource granting the managed identity (id-sqlmi-prod-001) access to Key Vault for TDE CMK operations"
+  ],
+  "correctionsRecommended": [
+    "Add a Log Analytics workspace and configure diagnostic settings on NSGs, Load Balancers, VMSS, Key Vault, and SQL MI for operational visibility",
+    "Add an autoscale setting resource (Microsoft.Insights/autoscaleSettings) targeting vmss-app-prod-001 for elastic application tier scaling",
+    "Add vmss-app-prod-001 network profile reference to lbi-app-prod-001 backend pool and add lbi-app-prod-001 to vmss-app-prod-001 dependencies",
+    "Add a Microsoft.Authorization/roleAssignments resource granting id-sqlmi-prod-001 the Key Vault Crypto Service Encryption User role on kv-threetier-prod-001",
+    "Consider replacing the external Standard LB with an Application Gateway or adding Azure Front Door for L7 features and WAF on the presentation tier",
+    "Add a resource tagging strategy (environment, cost-center, workload) across all resources for operational management and cost tracking"
+  ],
+  "hardDependencies": [],
+  "deployable": 1
+}

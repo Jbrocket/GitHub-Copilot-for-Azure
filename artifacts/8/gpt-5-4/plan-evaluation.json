@@ -1,0 +1,28 @@
+{
+  "overallScore": 0.88,
+  "dimensions": {
+    "goalAlignment": 0.92,
+    "wafConformance": 0.72,
+    "dependencyCompleteness": 0.95,
+    "deploymentViability": 0.93
+  },
+  "risks": [
+    "Single-region deployment (eastus only) with no zone redundancy — vulnerable to regional outages and does not meet WAF reliability guidance for production workloads",
+    "No VNet integration or private endpoints configured — all resources (Cosmos DB, Key Vault, Storage, ACR, ML workspace) are publicly accessible",
+    "Cosmos DB has publicNetworkAccess set to Enabled without IP or VNet restrictions, exposing the data plane to the public internet",
+    "Online endpoint uses Key-based authentication (authMode: Key) rather than AAD/managed identity, which is less secure and harder to rotate",
+    "ACR Basic tier has a 10 GiB storage limit — may constrain model image growth as the recommendation engine evolves",
+    "No diagnostic settings or resource tags defined for cost tracking, governance, or operational triage"
+  ],
+  "correctionsRecommended": [
+    "Add a second Cosmos DB region or enable availability zone redundancy (isZoneRedundant: true) for production reliability",
+    "Configure private endpoints for Cosmos DB, Key Vault, Storage Account, and the ML workspace to enforce network isolation",
+    "Set Cosmos DB publicNetworkAccess to Disabled once private endpoints are in place",
+    "Upgrade online endpoint authMode from Key to AADToken and use managed identity for service-to-service authentication",
+    "Add resource tags (e.g., environment, costCenter, workload) across all resources for governance and cost allocation",
+    "Consider upgrading ACR from Basic to Standard tier as model image count and size grow",
+    "Disable local (key-based) auth on the Storage Account to align with WAF security best practices"
+  ],
+  "hardDependencies": [],
+  "deployable": 1
+}

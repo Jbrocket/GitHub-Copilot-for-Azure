@@ -1,0 +1,36 @@
+{
+  "overallScore": 0.74,
+  "dimensions": {
+    "goalAlignment": 0.8,
+    "wafConformance": 0.68,
+    "dependencyCompleteness": 0.72,
+    "deploymentViability": 0.75
+  },
+  "risks": [
+    "Recovery Services Vault is deployed in the source region (eastus2); Microsoft documentation states the vault should be in the target region for cross-regional DR to ensure failover operations remain accessible during a source-region outage",
+    "No Site Recovery replication policy or replicated item resources are defined — the plan provisions infrastructure but omits the actual replication configuration linking VMs to the vault",
+    "No Network Security Groups (NSGs) defined for any subnets, leaving all three tiers (web, app, db) without network-level access controls",
+    "No monitoring or alerting resources (Log Analytics workspace, Azure Monitor alerts) to track replication health or failover readiness",
+    "No availability zone configuration for primary VMs — a zonal failure in eastus2 could trigger unnecessary cross-region failover",
+    "Target storage account (stor-target-westus2) uses GRS, which is unnecessary overhead; Azure Site Recovery documentation states cache and target storage do not need geo-redundancy since data is already replicated cross-region",
+    "No capacity reservations in the target region (westus2) — failover VMs may not find available compute capacity during a regional incident",
+    "Automation Account has no runbooks defined for the DNS failback automation described in the user goal"
+  ],
+  "correctionsRecommended": [
+    "Move Recovery Services Vault (rsv-primary-eastus2) to westus2 and rename appropriately — required for Azure-to-Azure cross-regional replication per Microsoft documentation",
+    "Add Site Recovery replication policy resource with RPO threshold, recovery point retention, and app-consistent snapshot frequency",
+    "Add Site Recovery replicated item resources for each VM (vm-web-01, vm-app-01, vm-db-01) linking source VM, cache storage account, target VNet, and target storage account",
+    "Add NSG resources for each subnet in both primary and secondary VNets with appropriate inbound/outbound rules per tier",
+    "Add a Log Analytics workspace and configure diagnostic settings on the Recovery Services Vault, VMs, and Traffic Manager for operational visibility",
+    "Add Azure Monitor alert rules for Site Recovery replication health and Traffic Manager endpoint degradation",
+    "Change target storage account SKU from Standard_GRS to Standard_LRS — geo-redundancy is unnecessary for Site Recovery replicated data",
+    "Define Automation runbooks for post-failover DNS update and failback orchestration scripts",
+    "Consider adding availability zone configuration for primary VMs to improve resilience within the source region",
+    "Consider adding on-demand capacity reservations in westus2 for the VM SKUs used in the plan"
+  ],
+  "hardDependencies": [
+    "Recovery Services Vault must be relocated to the target region (westus2) — Azure Site Recovery does not support cross-regional replication when the vault is in the same region as the source VMs",
+    "Site Recovery replicated items must be defined to establish the replication link between source VMs, cache storage, target VNet, and target storage account"
+  ],
+  "deployable": 1
+}

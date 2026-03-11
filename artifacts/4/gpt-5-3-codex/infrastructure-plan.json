@@ -1,0 +1,265 @@
+{
+  "meta": {
+    "planId": "plan-three-tier-vmss-sqlmi-001",
+    "generatedAt": "2026-03-11T13:22:30.352Z",
+    "version": "0.1-draft",
+    "status": "draft"
+  },
+  "inputs": {
+    "userGoal": "Configure an autoscaled VMSS-based presentation tier, application servers in separate subnet, and encrypted SQL Managed Instance backend database"
+  },
+  "plan": {
+    "resources": [
+      {
+        "name": "vnetApp001",
+        "type": "Microsoft.Network/virtualNetworks",
+        "subtype": "Virtual Network",
+        "location": "eastus",
+        "sku": "Standard",
+        "properties": {
+          "addressSpace": "10.10.0.0/16"
+        },
+        "reasoning": {
+          "whyChosen": "Provides network isolation across presentation, application, and data tiers for security and operational separation.",
+          "alternativesConsidered": ["Flat single-subnet network"],
+          "tradeoffs": "More network configuration complexity in exchange for stronger segmentation."
+        },
+        "dependencies": [],
+        "dependencyReasoning": null,
+        "references": [
+          {
+            "title": "Virtual network architecture",
+            "url": "https://learn.microsoft.com/azure/virtual-network/virtual-networks-overview"
+          }
+        ]
+      },
+      {
+        "name": "subnetPresentation",
+        "type": "Microsoft.Network/virtualNetworks/subnets",
+        "subtype": "Presentation tier subnet",
+        "location": "eastus",
+        "sku": "Standard",
+        "properties": {
+          "addressPrefix": "10.10.1.0/24"
+        },
+        "reasoning": {
+          "whyChosen": "Dedicated subnet for internet-facing tier limits blast radius and supports separate NSG controls.",
+          "alternativesConsidered": ["Shared subnet with app tier"],
+          "tradeoffs": "Uses more IP space but improves security boundaries."
+        },
+        "dependencies": ["vnetApp001"],
+        "dependencyReasoning": "Subnet is scoped to the virtual network.",
+        "references": [
+          {
+            "title": "Subnet planning",
+            "url": "https://learn.microsoft.com/azure/virtual-network/virtual-network-vnet-plan-design-arm"
+          }
+        ]
+      },
+      {
+        "name": "subnetApplication",
+        "type": "Microsoft.Network/virtualNetworks/subnets",
+        "subtype": "Application tier subnet",
+        "location": "eastus",
+        "sku": "Standard",
+        "properties": {
+          "addressPrefix": "10.10.2.0/24"
+        },
+        "reasoning": {
+          "whyChosen": "Keeps app servers isolated from presentation nodes and backend data services.",
+          "alternativesConsidered": ["Application servers in same subnet as presentation tier"],
+          "tradeoffs": "Additional routing/NSG setup required."
+        },
+        "dependencies": ["vnetApp001"],
+        "dependencyReasoning": "Subnet is scoped to the virtual network.",
+        "references": [
+          {
+            "title": "Subnets and segmentation",
+            "url": "https://learn.microsoft.com/azure/architecture/reference-architectures/hybrid-networking/hub-spoke"
+          }
+        ]
+      },
+      {
+        "name": "subnetManagedInstance",
+        "type": "Microsoft.Network/virtualNetworks/subnets",
+        "subtype": "SQL Managed Instance subnet",
+        "location": "eastus",
+        "sku": "Standard",
+        "properties": {
+          "addressPrefix": "10.10.3.0/27",
+          "delegations": ["Microsoft.Sql/managedInstances"]
+        },
+        "reasoning": {
+          "whyChosen": "SQL Managed Instance requires a dedicated delegated subnet to satisfy platform networking requirements.",
+          "alternativesConsidered": ["Azure SQL Database"],
+          "tradeoffs": "Managed Instance has higher baseline cost but better SQL Server compatibility."
+        },
+        "dependencies": ["vnetApp001"],
+        "dependencyReasoning": "Managed Instance subnet must be created within the VNet before SQL MI deployment.",
+        "references": [
+          {
+            "title": "SQL Managed Instance networking",
+            "url": "https://learn.microsoft.com/azure/azure-sql/managed-instance/connectivity-architecture-overview"
+          }
+        ]
+      },
+      {
+        "name": "lbPresentation",
+        "type": "Microsoft.Network/loadBalancers",
+        "subtype": "Public load balancer",
+        "location": "eastus",
+        "sku": "Standard",
+        "properties": {
+          "frontend": "PublicIP",
+          "backendPool": "presentationPool"
+        },
+        "reasoning": {
+          "whyChosen": "Distributes inbound traffic to presentation VMSS instances and provides high availability.",
+          "alternativesConsidered": ["Application Gateway"],
+          "tradeoffs": "Layer-4 balancing is simpler but lacks Layer-7 routing and WAF features."
+        },
+        "dependencies": ["subnetPresentation"],
+        "dependencyReasoning": "Presentation tier endpoints are in the presentation subnet.",
+        "references": [
+          {
+            "title": "Azure Load Balancer overview",
+            "url": "https://learn.microsoft.com/azure/load-balancer/load-balancer-overview"
+          }
+        ]
+      },
+      {
+        "name": "vmssPresentation",
+        "type": "Microsoft.Compute/virtualMachineScaleSets",
+        "subtype": "Linux VM Scale Set",
+        "location": "eastus",
+        "sku": "Standard_D2s_v5",
+        "properties": {
+          "orchestrationMode": "Flexible",
+          "instanceCount": 2,
+          "autoscale": {
+            "min": 2,
+            "max": 10,
+            "default": 2,
+            "scaleOutCpuPercent": 70,
+            "scaleInCpuPercent": 30
+          }
+        },
+        "reasoning": {
+          "whyChosen": "VMSS provides elastic scale for the presentation tier with built-in high availability and zone support.",
+          "alternativesConsidered": ["App Service"],
+          "tradeoffs": "More OS management overhead than PaaS but greater VM-level control."
+        },
+        "dependencies": ["subnetPresentation", "lbPresentation"],
+        "dependencyReasoning": "Presentation instances require subnet placement and load balancer backend association.",
+        "references": [
+          {
+            "title": "Virtual Machine Scale Sets overview",
+            "url": "https://learn.microsoft.com/azure/virtual-machine-scale-sets/overview"
+          }
+        ]
+      },
+      {
+        "name": "autoscalePresentation",
+        "type": "Microsoft.Insights/autoscalesettings",
+        "subtype": "CPU-based autoscale policy",
+        "location": "eastus",
+        "sku": "Standard",
+        "properties": {
+          "targetResource": "vmssPresentation",
+          "metrics": "Percentage CPU"
+        },
+        "reasoning": {
+          "whyChosen": "Externalized autoscale profile keeps scaling policy explicit and adjustable without VMSS image changes.",
+          "alternativesConsidered": ["Manual scaling"],
+          "tradeoffs": "Requires monitoring configuration and tuning thresholds over time."
+        },
+        "dependencies": ["vmssPresentation"],
+        "dependencyReasoning": "Autoscale setting targets the VMSS resource.",
+        "references": [
+          {
+            "title": "Autoscale best practices",
+            "url": "https://learn.microsoft.com/azure/azure-monitor/autoscale/autoscale-overview"
+          }
+        ]
+      },
+      {
+        "name": "vmssApplication",
+        "type": "Microsoft.Compute/virtualMachineScaleSets",
+        "subtype": "Application server pool",
+        "location": "eastus",
+        "sku": "Standard_D4s_v5",
+        "properties": {
+          "orchestrationMode": "Flexible",
+          "instanceCount": 2,
+          "autoscale": {
+            "enabled": false
+          }
+        },
+        "reasoning": {
+          "whyChosen": "Provides multiple application servers in a dedicated subnet while preserving consistency and simple horizontal growth.",
+          "alternativesConsidered": ["Availability set with standalone VMs"],
+          "tradeoffs": "VMSS operational model may be more than needed for static capacity."
+        },
+        "dependencies": ["subnetApplication"],
+        "dependencyReasoning": "Application tier nodes are deployed only into the application subnet.",
+        "references": [
+          {
+            "title": "VMSS in tiered architecture",
+            "url": "https://learn.microsoft.com/azure/architecture/reference-architectures/virtual-machines/Windows/3-tier"
+          }
+        ]
+      },
+      {
+        "name": "sqlManagedInstance001",
+        "type": "Microsoft.Sql/managedInstances",
+        "subtype": "SQL Managed Instance",
+        "location": "eastus",
+        "sku": "GP_Gen5",
+        "properties": {
+          "vCores": 4,
+          "storageSizeGB": 64,
+          "publicDataEndpointEnabled": false,
+          "minimalTlsVersion": "1.2",
+          "zoneRedundant": false,
+          "encryption": {
+            "transparentDataEncryption": "Enabled"
+          }
+        },
+        "reasoning": {
+          "whyChosen": "Managed Instance offers near-full SQL Server compatibility with built-in TDE encryption and private VNet deployment.",
+          "alternativesConsidered": ["Azure SQL Database", "SQL Server on VM"],
+          "tradeoffs": "Higher fixed cost and longer provisioning time than single database offerings."
+        },
+        "dependencies": ["subnetManagedInstance"],
+        "dependencyReasoning": "Managed Instance requires the delegated dedicated subnet before deployment.",
+        "references": [
+          {
+            "title": "SQL Managed Instance overview",
+            "url": "https://learn.microsoft.com/azure/azure-sql/managed-instance/sql-managed-instance-paas-overview"
+          }
+        ]
+      }
+    ],
+    "overallReasoning": {
+      "summary": "A three-tier network-segmented architecture is selected: autoscaled presentation VMSS behind a public load balancer, isolated application server pool in a separate subnet, and private encrypted SQL Managed Instance in a dedicated delegated subnet.",
+      "tradeoffs": "This design prioritizes compatibility, isolation, and elasticity, at the cost of higher baseline compute/database spend and greater network configuration complexity."
+    },
+    "validation": "All compute tiers and SQL MI are colocated in eastus; dependencies enforce VNet/subnet-first deployment and autoscale target binding for VMSS.",
+    "architecturePrinciples": [
+      "Highly available",
+      "Secure by default",
+      "Scalable",
+      "Network segmented"
+    ],
+    "references": [
+      {
+        "title": "Azure Well-Architected Framework",
+        "url": "https://learn.microsoft.com/azure/well-architected/"
+      },
+      {
+        "title": "N-tier architecture on Azure VMs",
+        "url": "https://learn.microsoft.com/azure/architecture/reference-architectures/virtual-machines/Windows/n-tier"
+      }
+    ]
+  }
+}

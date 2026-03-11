@@ -1,0 +1,154 @@
+{
+  "meta": {
+    "planId": "plan-sales-ingestion-daily",
+    "generatedAt": "2026-03-11T13:22:30.485Z",
+    "version": "0.1-draft",
+    "status": "draft"
+  },
+  "inputs": {
+    "userGoal": "Launch a data ingestion pipeline using Azure Data Factory for importing sales data daily, transform using Azure Databricks, and store results in Azure Synapse Analytics."
+  },
+  "plan": {
+    "resources": [
+      {
+        "name": "stsalesdatalake",
+        "type": "Microsoft.Storage/storageAccounts",
+        "subtype": "StorageV2 with ADLS Gen2",
+        "location": "eastus",
+        "sku": "Standard_LRS",
+        "properties": {
+          "kind": "StorageV2",
+          "isHnsEnabled": true,
+          "minimumTlsVersion": "TLS1_2",
+          "supportsHttpsTrafficOnly": true,
+          "containers": ["raw-sales", "curated-sales", "synapse-staging"]
+        },
+        "reasoning": {
+          "whyChosen": "Provides low-cost durable landing and curated zones for batch sales files and Synapse staging while enabling analytics-friendly hierarchical namespace.",
+          "alternativesConsidered": ["Blob Storage without HNS", "Azure Data Lake Storage Gen1"],
+          "tradeoffs": "Standard_LRS minimizes cost but does not provide zone redundancy."
+        },
+        "dependencies": [],
+        "references": [
+          {
+            "title": "Introduction to Azure Data Lake Storage",
+            "url": "https://learn.microsoft.com/azure/storage/blobs/data-lake-storage-introduction"
+          }
+        ]
+      },
+      {
+        "name": "adf-sales-ingestion",
+        "type": "Microsoft.DataFactory/factories",
+        "subtype": "Azure Data Factory",
+        "location": "eastus",
+        "sku": "Standard",
+        "properties": {
+          "managedVirtualNetwork": true,
+          "triggers": [
+            {
+              "name": "daily-sales-trigger",
+              "type": "ScheduleTrigger",
+              "frequency": "Day",
+              "interval": 1,
+              "startTimeUtc": "02:00"
+            }
+          ],
+          "pipelines": ["pl-ingest-sales-to-raw", "pl-run-databricks-transform"]
+        },
+        "reasoning": {
+          "whyChosen": "Orchestrates daily ingestion and transformation dependencies with native scheduling and monitoring.",
+          "alternativesConsidered": ["Azure Functions Timer", "Logic Apps"],
+          "tradeoffs": "ADF adds orchestration overhead compared to simple timers but scales better for enterprise ETL flows."
+        },
+        "dependencies": ["stsalesdatalake"],
+        "dependencyReasoning": "Ingestion pipelines require source/sink paths in the data lake.",
+        "references": [
+          {
+            "title": "Azure Data Factory documentation",
+            "url": "https://learn.microsoft.com/azure/data-factory/introduction"
+          }
+        ]
+      },
+      {
+        "name": "dbw-sales-transform",
+        "type": "Microsoft.Databricks/workspaces",
+        "subtype": "Azure Databricks Workspace",
+        "location": "eastus",
+        "sku": "standard",
+        "properties": {
+          "managedResourceGroup": "rg-db-managed-sales",
+          "jobs": ["job-transform-sales-daily"],
+          "runtime": "latest-LTS",
+          "autoscaling": {
+            "minWorkers": 2,
+            "maxWorkers": 8
+          }
+        },
+        "reasoning": {
+          "whyChosen": "Provides scalable Spark processing for cleansing, enrichment, and partitioned transformation of daily sales loads.",
+          "alternativesConsidered": ["Synapse Spark", "HDInsight Spark"],
+          "tradeoffs": "Dedicated Spark workspace improves developer productivity but adds separate workspace governance overhead."
+        },
+        "dependencies": ["stsalesdatalake", "adf-sales-ingestion"],
+        "dependencyReasoning": "Databricks jobs read/write lake zones and are triggered by ADF orchestration.",
+        "references": [
+          {
+            "title": "What is Azure Databricks?",
+            "url": "https://learn.microsoft.com/azure/databricks/introduction/"
+          }
+        ]
+      },
+      {
+        "name": "syn-sales-analytics",
+        "type": "Microsoft.Synapse/workspaces",
+        "subtype": "Azure Synapse Analytics Workspace",
+        "location": "eastus",
+        "sku": "Standard",
+        "properties": {
+          "defaultDataLakeStorage": "stsalesdatalake",
+          "sqlPools": [
+            {
+              "name": "dwsales",
+              "sku": "DW100c"
+            }
+          ],
+          "serverlessSqlEnabled": true
+        },
+        "reasoning": {
+          "whyChosen": "Delivers enterprise SQL analytics for transformed sales data with both serverless exploration and a small dedicated warehouse baseline.",
+          "alternativesConsidered": ["Azure SQL Database", "Databricks SQL Warehouse"],
+          "tradeoffs": "Dedicated SQL pool increases predictable performance but adds fixed compute cost."
+        },
+        "dependencies": ["stsalesdatalake", "dbw-sales-transform"],
+        "dependencyReasoning": "Synapse consumes curated data produced in the lake by Databricks transformations.",
+        "references": [
+          {
+            "title": "What is Azure Synapse Analytics?",
+            "url": "https://learn.microsoft.com/azure/synapse-analytics/overview-what-is"
+          }
+        ]
+      }
+    ],
+    "overallReasoning": {
+      "summary": "A daily batch architecture uses Data Factory for orchestration, Databricks for Spark transformations, and Synapse for analytics-serving over curated sales datasets in a shared data lake.",
+      "tradeoffs": "This design prioritizes managed services and scalability over lowest-possible cost; adding private networking and higher redundancy is deferred by default assumptions."
+    },
+    "validation": "Resource dependencies are coherent: landing storage first, orchestration second, transformation third, analytics serving fourth.",
+    "architecturePrinciples": [
+      "Managed PaaS first",
+      "Separation of ingestion, transform, and serving",
+      "Secure-by-default TLS and managed identity patterns",
+      "Cost-aware default sizing"
+    ],
+    "references": [
+      {
+        "title": "Cloud Adoption Framework for Azure",
+        "url": "https://learn.microsoft.com/azure/cloud-adoption-framework/"
+      },
+      {
+        "title": "Azure Architecture Center",
+        "url": "https://learn.microsoft.com/azure/architecture/"
+      }
+    ]
+  }
+}

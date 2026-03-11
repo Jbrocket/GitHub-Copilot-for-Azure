@@ -1,0 +1,31 @@
+{
+  "overallScore": 0.81,
+  "dimensions": {
+    "goalAlignment": 0.92,
+    "wafConformance": 0.82,
+    "dependencyCompleteness": 0.85,
+    "deploymentViability": 0.58
+  },
+  "risks": [
+    "AKS serviceCidr (10.2.0.0/16) overlaps with VNet address space (10.0.0.0/14, which covers 10.0.0.0–10.3.255.255) — this will cause AKS cluster creation to fail",
+    "ACR has publicNetworkAccess set to Enabled, exposing container images to the public internet",
+    "Service Bus Standard tier uses shared capacity with variable latency, which may not meet SLA requirements for payment processing",
+    "Single-region deployment (eastus only) with no cross-region disaster recovery strategy",
+    "No explicit per-service database isolation for order and payment services — only catalog data store (Cosmos DB) is defined",
+    "Redis Standard SKU lacks VNet injection — cache traffic is not isolated within the virtual network",
+    "No NSG or Azure Firewall resources defined for subnet-level traffic filtering"
+  ],
+  "correctionsRecommended": [
+    "Change AKS serviceCidr to a range outside the VNet address space (e.g., 172.16.0.0/16) to eliminate the CIDR overlap",
+    "Add private endpoint resources for ACR, Cosmos DB, Key Vault, and Service Bus on snet-services-001 to enforce private connectivity",
+    "Add Cosmos DB database and container child resources for order and payment services, or document the shared-database strategy",
+    "Update Cosmos DB dependency from vnet-ecommerce-prod-eastus-001 to snet-services-001 where service endpoints are actually configured",
+    "Add kv-ecommerce-prod-001 to AKS dependencies since the cluster uses the Key Vault CSI driver addon",
+    "Consider upgrading Redis to Premium SKU to enable VNet injection for network-isolated caching",
+    "Add Microsoft.Network/networkSecurityGroups resources and associate them with both subnets"
+  ],
+  "hardDependencies": [
+    "AKS serviceCidr (10.2.0.0/16) overlaps with VNet CIDR (10.0.0.0/14) — Azure will reject the managed cluster creation"
+  ],
+  "deployable": 0
+}

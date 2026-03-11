@@ -1,0 +1,313 @@
+{
+  "meta": {
+    "planId": "plan-aca-event-pipeline-001",
+    "generatedAt": "2026-03-11T13:22:30.422Z",
+    "version": "0.1-draft",
+    "status": "draft"
+  },
+  "inputs": {
+    "userGoal": "Provision an event-driven data processing pipeline using Azure Container Apps with pub/sub integration, connect to Azure Event Grid, and output results to Azure Cosmos DB, assuming defaults."
+  },
+  "plan": {
+    "resources": [
+      {
+        "name": "log-analytics-workspace",
+        "type": "Microsoft.OperationalInsights/workspaces",
+        "subtype": "Log Analytics Workspace",
+        "location": "eastus",
+        "sku": "PerGB2018",
+        "properties": {
+          "retentionInDays": 30
+        },
+        "reasoning": {
+          "whyChosen": "Container Apps environments require centralized diagnostics, and Log Analytics is the default operational store for ACA logs and metrics.",
+          "alternativesConsidered": ["Azure Monitor workspace with custom pipelines"],
+          "tradeoffs": "Adds ingestion cost but improves troubleshooting and operational visibility."
+        },
+        "dependencies": [],
+        "references": [
+          {
+            "title": "Azure Container Apps environments - Logging",
+            "url": "https://learn.microsoft.com/azure/container-apps/environment"
+          }
+        ]
+      },
+      {
+        "name": "aca-environment",
+        "type": "Microsoft.App/managedEnvironments",
+        "subtype": "Azure Container Apps Environment",
+        "location": "eastus",
+        "sku": "Consumption",
+        "properties": {
+          "zoneRedundant": false,
+          "workloadProfiles": []
+        },
+        "reasoning": {
+          "whyChosen": "Provides the runtime boundary for ACA services and supports event-driven scale with managed operations by default.",
+          "alternativesConsidered": ["AKS", "App Service"],
+          "tradeoffs": "Less cluster-level control than AKS but significantly lower operational overhead."
+        },
+        "dependencies": ["log-analytics-workspace"],
+        "dependencyReasoning": "Environment is configured to send logs/diagnostics to Log Analytics.",
+        "references": [
+          {
+            "title": "Azure Container Apps overview",
+            "url": "https://learn.microsoft.com/azure/container-apps/overview"
+          }
+        ]
+      },
+      {
+        "name": "servicebus-namespace",
+        "type": "Microsoft.ServiceBus/namespaces",
+        "subtype": "Service Bus Namespace",
+        "location": "eastus",
+        "sku": "Standard",
+        "properties": {
+          "publicNetworkAccess": "Enabled"
+        },
+        "reasoning": {
+          "whyChosen": "Implements durable pub/sub for ACA using a managed broker that integrates with Dapr pub/sub components.",
+          "alternativesConsidered": ["Event Hubs", "Storage Queues"],
+          "tradeoffs": "Slightly higher messaging cost than queues but enables topic/subscription fan-out semantics."
+        },
+        "dependencies": [],
+        "references": [
+          {
+            "title": "Azure Service Bus topics and subscriptions",
+            "url": "https://learn.microsoft.com/azure/service-bus-messaging/service-bus-queues-topics-subscriptions"
+          }
+        ]
+      },
+      {
+        "name": "servicebus-topic-ingest",
+        "type": "Microsoft.ServiceBus/namespaces/topics",
+        "subtype": "Service Bus Topic",
+        "location": "eastus",
+        "sku": "Standard",
+        "properties": {
+          "enablePartitioning": true
+        },
+        "reasoning": {
+          "whyChosen": "Primary pub/sub channel for inbound events before processing in ACA.",
+          "alternativesConsidered": ["Single queue"],
+          "tradeoffs": "Topic/subscription adds complexity but improves extensibility for more consumers later."
+        },
+        "dependencies": ["servicebus-namespace"],
+        "dependencyReasoning": "Topic is a child resource within the namespace.",
+        "references": [
+          {
+            "title": "Create and use Service Bus topics",
+            "url": "https://learn.microsoft.com/azure/service-bus-messaging/service-bus-dotnet-how-to-use-topics-subscriptions"
+          }
+        ]
+      },
+      {
+        "name": "servicebus-subscription-aca",
+        "type": "Microsoft.ServiceBus/namespaces/topics/subscriptions",
+        "subtype": "Service Bus Subscription",
+        "location": "eastus",
+        "sku": "Standard",
+        "properties": {
+          "maxDeliveryCount": 10,
+          "deadLetteringOnMessageExpiration": true
+        },
+        "reasoning": {
+          "whyChosen": "Defines the consumer stream read by ACA workers with dead-letter safety defaults.",
+          "alternativesConsidered": ["Direct topic polling without dedicated subscription"],
+          "tradeoffs": "Adds one extra resource but gives isolated consumer state and retry behavior."
+        },
+        "dependencies": ["servicebus-topic-ingest"],
+        "dependencyReasoning": "Subscription is a child of the Service Bus topic.",
+        "references": [
+          {
+            "title": "Service Bus dead-letter queues",
+            "url": "https://learn.microsoft.com/azure/service-bus-messaging/service-bus-dead-letter-queues"
+          }
+        ]
+      },
+      {
+        "name": "containerapp-processor",
+        "type": "Microsoft.App/containerApps",
+        "subtype": "Azure Container App",
+        "location": "eastus",
+        "sku": "Consumption",
+        "properties": {
+          "ingress": {
+            "external": true,
+            "targetPort": 8080
+          },
+          "identity": "SystemAssigned",
+          "dapr": {
+            "enabled": true,
+            "appPort": 8080,
+            "appProtocol": "http"
+          },
+          "scale": {
+            "minReplicas": 0,
+            "maxReplicas": 10
+          }
+        },
+        "reasoning": {
+          "whyChosen": "Runs the processing workload with built-in autoscaling and Dapr-based pub/sub integration while minimizing ops overhead.",
+          "alternativesConsidered": ["Azure Functions", "AKS"],
+          "tradeoffs": "Less control than AKS, but simpler deployment and scaling for event-driven services."
+        },
+        "dependencies": ["aca-environment", "servicebus-subscription-aca", "cosmos-account"],
+        "dependencyReasoning": "App runs in ACA environment, consumes pub/sub events from Service Bus, and writes output to Cosmos DB via managed identity.",
+        "references": [
+          {
+            "title": "Dapr integration in Azure Container Apps",
+            "url": "https://learn.microsoft.com/azure/container-apps/dapr-overview"
+          }
+        ]
+      },
+      {
+        "name": "eventgrid-topic",
+        "type": "Microsoft.EventGrid/topics",
+        "subtype": "Custom Topic",
+        "location": "eastus",
+        "sku": "Basic",
+        "properties": {
+          "inputSchema": "EventGridSchema"
+        },
+        "reasoning": {
+          "whyChosen": "Provides event ingress endpoint for producer systems and standard event routing semantics.",
+          "alternativesConsidered": ["Event Grid domain", "Direct Service Bus publish"],
+          "tradeoffs": "Extra hop versus direct publish, but cleaner eventing contract and broader integration options."
+        },
+        "dependencies": [],
+        "references": [
+          {
+            "title": "Azure Event Grid custom topics",
+            "url": "https://learn.microsoft.com/azure/event-grid/custom-event-quickstart-portal"
+          }
+        ]
+      },
+      {
+        "name": "eventgrid-subscription-to-servicebus",
+        "type": "Microsoft.EventGrid/topics/eventSubscriptions",
+        "subtype": "Event Subscription",
+        "location": "eastus",
+        "sku": "Basic",
+        "properties": {
+          "destination": "ServiceBusTopic",
+          "maxDeliveryAttempts": 30,
+          "eventTimeToLiveInMinutes": 1440
+        },
+        "reasoning": {
+          "whyChosen": "Routes Event Grid events into the pub/sub backbone consumed by ACA.",
+          "alternativesConsidered": ["Webhook to ACA ingress"],
+          "tradeoffs": "One additional managed routing resource, but decouples ingress from processor availability."
+        },
+        "dependencies": ["eventgrid-topic", "servicebus-topic-ingest"],
+        "dependencyReasoning": "Subscription binds source topic to Service Bus destination.",
+        "references": [
+          {
+            "title": "Event Grid event handlers",
+            "url": "https://learn.microsoft.com/azure/event-grid/handler-service-bus"
+          }
+        ]
+      },
+      {
+        "name": "cosmos-account",
+        "type": "Microsoft.DocumentDB/databaseAccounts",
+        "subtype": "Azure Cosmos DB for NoSQL",
+        "location": "eastus",
+        "sku": "Standard",
+        "properties": {
+          "databaseAccountOfferType": "Standard",
+          "capabilities": ["EnableServerless"],
+          "publicNetworkAccess": "Enabled"
+        },
+        "reasoning": {
+          "whyChosen": "NoSQL document store is a strong fit for event processing outputs with flexible schema and low-latency reads/writes.",
+          "alternativesConsidered": ["Azure SQL Database", "Table Storage"],
+          "tradeoffs": "RU-based cost model requires partitioning discipline for predictable spend and performance."
+        },
+        "dependencies": [],
+        "references": [
+          {
+            "title": "Azure Cosmos DB for NoSQL overview",
+            "url": "https://learn.microsoft.com/azure/cosmos-db/nosql/introduction"
+          }
+        ]
+      },
+      {
+        "name": "cosmos-sql-database",
+        "type": "Microsoft.DocumentDB/databaseAccounts/sqlDatabases",
+        "subtype": "Cosmos SQL Database",
+        "location": "eastus",
+        "sku": "Standard",
+        "properties": {
+          "resource": {
+            "id": "eventsdb"
+          }
+        },
+        "reasoning": {
+          "whyChosen": "Logical data boundary for processed event datasets.",
+          "alternativesConsidered": ["Single default database"],
+          "tradeoffs": "Explicit database resource improves separation but adds one managed object."
+        },
+        "dependencies": ["cosmos-account"],
+        "dependencyReasoning": "SQL database is a child resource of Cosmos account.",
+        "references": [
+          {
+            "title": "Modeling data in Cosmos DB",
+            "url": "https://learn.microsoft.com/azure/cosmos-db/nosql/modeling-data"
+          }
+        ]
+      },
+      {
+        "name": "cosmos-container-results",
+        "type": "Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers",
+        "subtype": "Cosmos SQL Container",
+        "location": "eastus",
+        "sku": "Standard",
+        "properties": {
+          "resource": {
+            "id": "processed-events",
+            "partitionKey": {
+              "paths": ["/eventType"],
+              "kind": "Hash"
+            }
+          }
+        },
+        "reasoning": {
+          "whyChosen": "Stores processed event output with a partition key aligned to event-driven query patterns.",
+          "alternativesConsidered": ["Partition by /source", "Multiple containers by event type"],
+          "tradeoffs": "Single container simplifies operations but may require repartitioning for skewed workloads."
+        },
+        "dependencies": ["cosmos-sql-database"],
+        "dependencyReasoning": "Container is nested under the SQL database resource.",
+        "references": [
+          {
+            "title": "Partitioning and horizontal scaling in Cosmos DB",
+            "url": "https://learn.microsoft.com/azure/cosmos-db/partitioning-overview"
+          }
+        ]
+      }
+    ],
+    "overallReasoning": {
+      "summary": "This default architecture uses Event Grid for ingress, Service Bus for durable pub/sub, ACA for elastic event processing with Dapr integration, and Cosmos DB for low-latency NoSQL output storage.",
+      "tradeoffs": "The design optimizes operational simplicity and decoupling, at the cost of additional managed messaging hops and cross-service configuration complexity."
+    },
+    "validation": "All resources form a coherent event-driven path: producers publish to Event Grid, Event Grid routes to Service Bus topic/subscription, ACA processes messages and writes results to Cosmos DB.",
+    "architecturePrinciples": [
+      "Event-driven decoupling",
+      "Managed services first",
+      "Least operational overhead",
+      "Elastic scale",
+      "Observability by default"
+    ],
+    "references": [
+      {
+        "title": "Azure architecture center - Event-driven architectures",
+        "url": "https://learn.microsoft.com/azure/architecture/guide/architecture-styles/event-driven"
+      },
+      {
+        "title": "Azure Well-Architected Framework",
+        "url": "https://learn.microsoft.com/azure/well-architected/"
+      }
+    ]
+  }
+}

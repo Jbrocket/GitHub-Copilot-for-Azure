@@ -1,0 +1,398 @@
+{
+  "meta": {
+    "planId": "iot-edge-ai-anomaly-detection-plan-1",
+    "generatedAt": "2026-03-11T13:11:03.000Z",
+    "version": "0.1-draft",
+    "status": "draft"
+  },
+  "inputs": {
+    "userGoal": "Create an Azure IoT Hub edge deployment with AI module for anomaly detection, output events to Cosmos DB, and send SMS alerts via Logic Apps"
+  },
+  "plan": {
+    "resources": [
+      {
+        "name": "rg-iot-edge-prod-001",
+        "type": "Microsoft.Resources/resourceGroups",
+        "location": "eastus",
+        "sku": "Standard",
+        "properties": {},
+        "reasoning": {
+          "whyChosen": "Dedicated resource group provides logical isolation and simplified management of all IoT edge components. East US chosen for cost-effectiveness and broad service availability.",
+          "alternativesConsidered": ["West US 2", "Central US"],
+          "tradeoffs": "East US provides lower latency for East Coast operations but may have higher latency for global access"
+        },
+        "dependencies": [],
+        "references": [
+          {
+            "title": "Resource Groups Overview",
+            "url": "https://learn.microsoft.com/azure/azure-resource-manager/management/overview#resource-groups"
+          }
+        ]
+      },
+      {
+        "name": "iothub-edge-prod-001",
+        "type": "Microsoft.Devices/IotHubs",
+        "location": "eastus",
+        "sku": "S1",
+        "properties": {
+          "enableFileUploadNotifications": true,
+          "enableDataResidency": false,
+          "publicNetworkAccess": "Enabled"
+        },
+        "reasoning": {
+          "whyChosen": "IoT Hub S1 tier provides sufficient message throughput for edge devices, supports device-to-cloud and cloud-to-device messaging. Enables IoT Edge runtime management and module deployment.",
+          "alternativesConsidered": ["Basic B1", "Standard S2", "Standard S3"],
+          "tradeoffs": "S1 provides good balance of cost and features; higher tiers offer more throughput but at increased cost"
+        },
+        "dependencies": ["rg-iot-edge-prod-001"],
+        "dependencyReasoning": "Must be deployed in the resource group",
+        "references": [
+          {
+            "title": "IoT Hub Overview",
+            "url": "https://learn.microsoft.com/azure/iot-hub/about-iot-hub"
+          },
+          {
+            "title": "IoT Hub Pricing Tiers",
+            "url": "https://azure.microsoft.com/pricing/details/iot-hub/"
+          }
+        ]
+      },
+      {
+        "name": "vm-iot-edge-001",
+        "type": "Microsoft.Compute/virtualMachines",
+        "location": "eastus",
+        "sku": "Standard_B2s",
+        "properties": {
+          "osProfile": {
+            "computerName": "iot-edge-vm",
+            "linuxConfiguration": {
+              "disablePasswordAuthentication": false
+            }
+          },
+          "storageProfile": {
+            "osDisk": {
+              "createOption": "FromImage",
+              "managedDisk": {
+                "storageAccountType": "Premium_LRS"
+              }
+            },
+            "imageReference": {
+              "publisher": "Canonical",
+              "offer": "0001-com-ubuntu-server-focal",
+              "sku": "20_04-lts-gen2",
+              "version": "latest"
+            }
+          }
+        },
+        "reasoning": {
+          "whyChosen": "Standard_B2s VM provides adequate compute for IoT Edge runtime and AI modules with burstable CPU. Ubuntu 20.04 LTS is well-supported for IoT Edge deployments.",
+          "alternativesConsidered": ["Standard_B1s", "Standard_D2s_v3", "Container Instances"],
+          "tradeoffs": "B2s is cost-effective for variable workloads but may need scaling for high-throughput AI processing"
+        },
+        "dependencies": ["rg-iot-edge-prod-001", "vnet-iot-prod-001", "nsg-iot-edge-001"],
+        "dependencyReasoning": "VM requires virtual network for connectivity and network security group for access control",
+        "references": [
+          {
+            "title": "IoT Edge on Linux",
+            "url": "https://learn.microsoft.com/azure/iot-edge/how-to-provision-single-device-linux-symmetric"
+          },
+          {
+            "title": "VM Sizes",
+            "url": "https://learn.microsoft.com/azure/virtual-machines/sizes"
+          }
+        ]
+      },
+      {
+        "name": "vnet-iot-prod-001",
+        "type": "Microsoft.Network/virtualNetworks",
+        "location": "eastus",
+        "sku": "Standard",
+        "properties": {
+          "addressSpace": {
+            "addressPrefixes": ["10.0.0.0/16"]
+          },
+          "subnets": [
+            {
+              "name": "iot-edge-subnet",
+              "properties": {
+                "addressPrefix": "10.0.1.0/24"
+              }
+            }
+          ]
+        },
+        "reasoning": {
+          "whyChosen": "Dedicated VNet provides network isolation for IoT edge devices with private IP addressing. Single subnet sufficient for initial deployment.",
+          "alternativesConsidered": ["Multiple subnets", "Hub-spoke topology"],
+          "tradeoffs": "Simple single-subnet design reduces complexity but may require redesign for complex multi-tier architectures"
+        },
+        "dependencies": ["rg-iot-edge-prod-001"],
+        "dependencyReasoning": "VNet must be created in the resource group",
+        "references": [
+          {
+            "title": "Virtual Networks Overview",
+            "url": "https://learn.microsoft.com/azure/virtual-network/virtual-networks-overview"
+          }
+        ]
+      },
+      {
+        "name": "nsg-iot-edge-001",
+        "type": "Microsoft.Network/networkSecurityGroups",
+        "location": "eastus",
+        "sku": "Standard",
+        "properties": {
+          "securityRules": [
+            {
+              "name": "SSH",
+              "properties": {
+                "protocol": "TCP",
+                "sourcePortRange": "*",
+                "destinationPortRange": "22",
+                "sourceAddressPrefix": "*",
+                "destinationAddressPrefix": "*",
+                "access": "Allow",
+                "priority": 1001,
+                "direction": "Inbound"
+              }
+            },
+            {
+              "name": "IoTEdgeAgent",
+              "properties": {
+                "protocol": "TCP",
+                "sourcePortRange": "*",
+                "destinationPortRange": "443",
+                "sourceAddressPrefix": "*",
+                "destinationAddressPrefix": "*",
+                "access": "Allow",
+                "priority": 1002,
+                "direction": "Outbound"
+              }
+            }
+          ]
+        },
+        "reasoning": {
+          "whyChosen": "Network Security Group provides firewall rules for IoT Edge VM. Allows SSH access for management and HTTPS for IoT Edge agent communication.",
+          "alternativesConsidered": ["Azure Firewall", "Application Security Groups"],
+          "tradeoffs": "NSG provides basic security at lower cost but lacks advanced threat protection of Azure Firewall"
+        },
+        "dependencies": ["rg-iot-edge-prod-001"],
+        "dependencyReasoning": "NSG must be created in the resource group",
+        "references": [
+          {
+            "title": "Network Security Groups",
+            "url": "https://learn.microsoft.com/azure/virtual-network/network-security-groups-overview"
+          }
+        ]
+      },
+      {
+        "name": "cog-anomaly-prod-001",
+        "type": "Microsoft.CognitiveServices/accounts",
+        "location": "eastus",
+        "sku": "S0",
+        "properties": {
+          "kind": "AnomalyDetector",
+          "customSubDomainName": "anomaly-detector-iot-prod",
+          "publicNetworkAccess": "Enabled"
+        },
+        "reasoning": {
+          "whyChosen": "Cognitive Services Anomaly Detector provides pre-built AI models for time-series anomaly detection. S0 tier offers good balance of cost and performance for production workloads.",
+          "alternativesConsidered": ["Custom ML model", "Azure Machine Learning", "F0 Free tier"],
+          "tradeoffs": "Managed service reduces development time but limits customization compared to custom ML models"
+        },
+        "dependencies": ["rg-iot-edge-prod-001"],
+        "dependencyReasoning": "Cognitive Services account must be created in the resource group",
+        "references": [
+          {
+            "title": "Anomaly Detector Overview",
+            "url": "https://learn.microsoft.com/azure/ai-services/anomaly-detector/"
+          },
+          {
+            "title": "Cognitive Services Pricing",
+            "url": "https://azure.microsoft.com/pricing/details/cognitive-services/"
+          }
+        ]
+      },
+      {
+        "name": "cosmos-iot-events-prod-001",
+        "type": "Microsoft.DocumentDB/databaseAccounts",
+        "location": "eastus",
+        "sku": "Standard",
+        "properties": {
+          "kind": "GlobalDocumentDB",
+          "databaseAccountOfferType": "Standard",
+          "consistencyPolicy": {
+            "defaultConsistencyLevel": "Session"
+          },
+          "enableAutomaticFailover": false,
+          "enableMultipleWriteLocations": false,
+          "enableFreeTier": false,
+          "publicNetworkAccess": "Enabled"
+        },
+        "reasoning": {
+          "whyChosen": "Cosmos DB provides globally distributed, low-latency storage for IoT telemetry data. Session consistency balances performance and data consistency for IoT scenarios.",
+          "alternativesConsidered": ["Azure SQL Database", "Azure Table Storage", "Event Hubs"],
+          "tradeoffs": "Cosmos DB offers excellent scale and performance but at higher cost than traditional SQL databases"
+        },
+        "dependencies": ["rg-iot-edge-prod-001"],
+        "dependencyReasoning": "Cosmos DB account must be created in the resource group",
+        "references": [
+          {
+            "title": "Cosmos DB Overview",
+            "url": "https://learn.microsoft.com/azure/cosmos-db/introduction"
+          },
+          {
+            "title": "Cosmos DB for IoT",
+            "url": "https://learn.microsoft.com/azure/cosmos-db/use-cases#iot-and-telematics"
+          }
+        ]
+      },
+      {
+        "name": "acs-sms-prod-001",
+        "type": "Microsoft.Communication/CommunicationServices",
+        "location": "global",
+        "sku": "Standard",
+        "properties": {
+          "dataLocation": "United States"
+        },
+        "reasoning": {
+          "whyChosen": "Azure Communication Services provides SMS capabilities for sending alerts. Global deployment with US data location for compliance.",
+          "alternativesConsidered": ["Third-party SMS services", "SendGrid", "Twilio"],
+          "tradeoffs": "Native Azure service provides better integration but may have limited global SMS coverage compared to specialized providers"
+        },
+        "dependencies": ["rg-iot-edge-prod-001"],
+        "dependencyReasoning": "Communication Services must be created in the resource group",
+        "references": [
+          {
+            "title": "Communication Services Overview",
+            "url": "https://learn.microsoft.com/azure/communication-services/overview"
+          },
+          {
+            "title": "SMS Capabilities",
+            "url": "https://learn.microsoft.com/azure/communication-services/concepts/sms/concepts"
+          }
+        ]
+      },
+      {
+        "name": "logic-sms-alerts-prod-001",
+        "type": "Microsoft.Logic/workflows",
+        "location": "eastus",
+        "sku": "Standard",
+        "properties": {
+          "definition": {
+            "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+            "triggers": {
+              "manual": {
+                "type": "Request",
+                "kind": "Http"
+              }
+            }
+          }
+        },
+        "reasoning": {
+          "whyChosen": "Logic Apps provides serverless workflow orchestration to process anomaly events and trigger SMS alerts. Standard tier offers good performance and reliability.",
+          "alternativesConsidered": ["Azure Functions", "Event Grid + Functions", "Consumption Logic Apps"],
+          "tradeoffs": "Logic Apps simplifies workflow design but may have higher cost than custom Functions for simple scenarios"
+        },
+        "dependencies": ["rg-iot-edge-prod-001", "acs-sms-prod-001"],
+        "dependencyReasoning": "Logic App needs Communication Services for SMS functionality",
+        "references": [
+          {
+            "title": "Logic Apps Overview",
+            "url": "https://learn.microsoft.com/azure/logic-apps/logic-apps-overview"
+          },
+          {
+            "title": "Logic Apps SMS Connector",
+            "url": "https://learn.microsoft.com/azure/communication-services/quickstarts/sms/send"
+          }
+        ]
+      },
+      {
+        "name": "st-iotedge-prod-001",
+        "type": "Microsoft.Storage/storageAccounts",
+        "location": "eastus",
+        "sku": "Standard_LRS",
+        "properties": {
+          "kind": "StorageV2",
+          "accessTier": "Hot",
+          "allowBlobPublicAccess": false,
+          "minimumTlsVersion": "TLS1_2",
+          "supportsHttpsTrafficOnly": true
+        },
+        "reasoning": {
+          "whyChosen": "Storage account required for IoT Edge modules, container images, and logging. Standard LRS provides cost-effective local redundancy for non-critical data.",
+          "alternativesConsidered": ["Premium SSD", "Standard GRS", "Standard ZRS"],
+          "tradeoffs": "LRS offers lowest cost but no geo-redundancy; acceptable for development logs and temporary data"
+        },
+        "dependencies": ["rg-iot-edge-prod-001"],
+        "dependencyReasoning": "Storage account must be created in the resource group",
+        "references": [
+          {
+            "title": "Storage Account Overview",
+            "url": "https://learn.microsoft.com/azure/storage/common/storage-account-overview"
+          },
+          {
+            "title": "IoT Edge Storage Requirements",
+            "url": "https://learn.microsoft.com/azure/iot-edge/production-checklist#storage-requirements"
+          }
+        ]
+      },
+      {
+        "name": "kv-iot-edge-prod-001",
+        "type": "Microsoft.KeyVault/vaults",
+        "location": "eastus",
+        "sku": "Standard",
+        "properties": {
+          "enableSoftDelete": true,
+          "enablePurgeProtection": false,
+          "enableRbacAuthorization": true,
+          "enabledForDeployment": false,
+          "enabledForTemplateDeployment": false,
+          "enabledForDiskEncryption": false,
+          "publicNetworkAccess": "Enabled"
+        },
+        "reasoning": {
+          "whyChosen": "Key Vault securely stores connection strings, certificates, and secrets for IoT Edge modules and services. RBAC authorization provides fine-grained access control.",
+          "alternativesConsidered": ["Azure App Configuration", "Environment variables", "Premium Key Vault"],
+          "tradeoffs": "Centralized secret management improves security but adds complexity compared to direct configuration"
+        },
+        "dependencies": ["rg-iot-edge-prod-001"],
+        "dependencyReasoning": "Key Vault must be created in the resource group",
+        "references": [
+          {
+            "title": "Key Vault Overview",
+            "url": "https://learn.microsoft.com/azure/key-vault/general/overview"
+          },
+          {
+            "title": "IoT Edge Security",
+            "url": "https://learn.microsoft.com/azure/iot-edge/security"
+          }
+        ]
+      }
+    ],
+    "overallReasoning": {
+      "summary": "This architecture implements a complete IoT Edge solution with AI-powered anomaly detection. IoT devices connect to IoT Hub, which manages edge devices running anomaly detection modules. Detected anomalies are stored in Cosmos DB and trigger SMS alerts via Logic Apps and Communication Services. The solution provides scalable, secure, and managed services for IoT data processing.",
+      "tradeoffs": "Uses managed Azure services for faster deployment and reduced maintenance overhead, but at higher cost than custom implementations. Single-region deployment reduces complexity but lacks geo-redundancy for disaster recovery."
+    },
+    "validation": "All resources are properly sized for a production IoT Edge deployment. Dependencies are correctly ordered, with networking infrastructure created before compute resources. Security is addressed through Key Vault for secrets management and NSGs for network access control. The architecture supports the complete flow from IoT devices through edge processing to alerting.",
+    "architecturePrinciples": [
+      "Highly available",
+      "Secure by default",
+      "Cost optimized",
+      "Operationally excellent",
+      "Performance efficient"
+    ],
+    "references": [
+      {
+        "title": "IoT Edge Architecture Guide",
+        "url": "https://learn.microsoft.com/azure/iot-edge/iot-edge-runtime"
+      },
+      {
+        "title": "Azure IoT Solution Architecture",
+        "url": "https://learn.microsoft.com/azure/iot/concepts-architecture"
+      },
+      {
+        "title": "Azure Well-Architected Framework - IoT",
+        "url": "https://learn.microsoft.com/azure/well-architected/iot/"
+      }
+    ]
+  }
+}

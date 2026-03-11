@@ -1,0 +1,29 @@
+{
+  "overallScore": 0.85,
+  "dimensions": {
+    "goalAlignment": 0.82,
+    "wafConformance": 0.72,
+    "dependencyCompleteness": 0.95,
+    "deploymentViability": 0.93
+  },
+  "risks": [
+    "Storage accounts have networkAcls.defaultAction set to Allow, permitting unrestricted network access to training data and ML workspace storage",
+    "No compute resources (ML compute cluster or compute instance) are defined — actual training jobs cannot run without compute",
+    "No diagnostic settings resources to route audit logs from Key Vault, Storage, ACR, and ML workspace to Log Analytics — audit logging goal is only partially met",
+    "LRS redundancy on both storage accounts provides no zone or geo failover — data loss risk for training data and outputs",
+    "Basic ACR SKU does not support private endpoints or content trust, limiting production security hardening options",
+    "Public network access is enabled on ML workspace, Key Vault, storage accounts, and ACR — increases attack surface",
+    "No RBAC role assignments defined for ML workspace managed identity to access the Data Lake storage account"
+  ],
+  "correctionsRecommended": [
+    "Add an Azure ML compute cluster resource (Microsoft.MachineLearningServices/workspaces/computes) to enable training job execution",
+    "Add diagnostic settings resources (Microsoft.Insights/diagnosticSettings) for each service to route logs to the Log Analytics workspace, fulfilling the audit logging requirement",
+    "Restrict storage account networkAcls.defaultAction to Deny and add appropriate IP/VNet exceptions",
+    "Add RBAC role assignments granting the ML workspace managed identity Storage Blob Data Contributor on the Data Lake account",
+    "Consider upgrading storage redundancy from LRS to ZRS for production-grade resilience",
+    "Add a resource tagging strategy for cost tracking and operational governance",
+    "Consider disabling local auth (shared key access) on storage accounts per Azure best practices"
+  ],
+  "hardDependencies": [],
+  "deployable": 1
+}

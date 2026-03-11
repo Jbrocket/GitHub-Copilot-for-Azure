@@ -1,0 +1,50 @@
+{
+  "format": "bicep",
+  "region": "eastus",
+  "defaults": {
+    "nodeSize": "Standard_DS2_v2",
+    "nodeCount": 3,
+    "acrSku": "Standard",
+    "logAnalyticsSku": "PerGB2018"
+  },
+  "resources": {
+    "resourceGroup": "<project>-rg",
+    "vnet": { "addressSpace": "10.0.0.0/16", "aksSubnet": "10.0.0.0/24" },
+    "acr": { "name": "<project>acr", "sku": "Standard" },
+    "aks": {
+      "name": "<project>-aks",
+      "kubernetesVersion": "default",
+      "nodePools": [ { "name": "agentpool", "vmSize": "Standard_DS2_v2", "count": 3 } ],
+      "networkPlugin": "azure",
+      "enableRBAC": true
+    },
+    "keyVault": { "name": "<project>-kv" },
+    "logAnalytics": { "workspaceName": "<project>-law" }
+  },
+  "serviceMesh": {
+    "type": "Open Service Mesh",
+    "notes": "Install OSM via Helm or OSM CLI after AKS is provisioned. Enable SMI policies and mTLS."
+  },
+  "ingress": {
+    "type": "NGINX + Application Gateway",
+    "notes": "Use AGIC if using Application Gateway; Front Door optional for global routing."
+  },
+  "helm": {
+    "charts": ["catalog", "order", "payment"],
+    "namespaceStrategy": "one-namespace-per-service"
+  },
+  "ci_cd": {
+    "type": "GitHub Actions",
+    "pipeline": [ "build -> test -> push to ACR -> helm deploy to AKS" ]
+  },
+  "security": {
+    "keyVaultIntegration": true,
+    "podIdentity": true,
+    "networkPolicies": "use Azure network policies or Calico"
+  },
+  "monitoring": { "azureMonitor": true, "prometheus": true, "grafana": true },
+  "deploymentCommands": {
+    "bicepDeploy": "az deployment group create -g <rg> -f main.bicep",
+    "helmDeploy": "helm repo add myrepo https://... && helm install catalog ./charts/catalog -n catalog --create-namespace"
+  }
+}

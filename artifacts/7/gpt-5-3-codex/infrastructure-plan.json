@@ -1,0 +1,296 @@
+{
+  "meta": {
+    "planId": "plan-secure-ml-training-pipeline-001",
+    "generatedAt": "2026-03-11T13:22:30.431Z",
+    "version": "0.1-draft",
+    "status": "draft"
+  },
+  "inputs": {
+    "userGoal": "Build a secure ML training pipeline with data stored in Azure Data Lake, enable audit logging for all training jobs, and encrypt all outputs."
+  },
+  "plan": {
+    "resources": [
+      {
+        "name": "stmltraineus001",
+        "type": "Microsoft.Storage/storageAccounts",
+        "subtype": "StorageV2 (ADLS Gen2)",
+        "location": "eastus",
+        "sku": "Standard_GRS",
+        "properties": {
+          "kind": "StorageV2",
+          "isHnsEnabled": true,
+          "minimumTlsVersion": "TLS1_2",
+          "supportsHttpsTrafficOnly": true,
+          "allowBlobPublicAccess": false,
+          "allowSharedKeyAccess": false,
+          "encryption": {
+            "services": {
+              "blob": {
+                "enabled": true
+              },
+              "file": {
+                "enabled": true
+              }
+            },
+            "keySource": "Microsoft.Storage"
+          },
+          "infrastructureEncryption": {
+            "enabled": true
+          }
+        },
+        "reasoning": {
+          "whyChosen": "Provides Azure Data Lake Storage Gen2 as the canonical training data and output store with encryption-at-rest and hardened defaults.",
+          "alternativesConsidered": [
+            "Azure Blob Storage without HNS",
+            "Azure NetApp Files"
+          ],
+          "tradeoffs": "ADLS Gen2 adds ACL and analytics flexibility but introduces slightly more operational complexity than simple blob storage."
+        },
+        "dependencies": [],
+        "references": [
+          {
+            "title": "Azure Data Lake Storage Gen2 introduction",
+            "url": "https://learn.microsoft.com/azure/storage/blobs/data-lake-storage-introduction"
+          }
+        ]
+      },
+      {
+        "name": "log-mltrain-eus-001",
+        "type": "Microsoft.OperationalInsights/workspaces",
+        "location": "eastus",
+        "sku": "PerGB2018",
+        "properties": {
+          "retentionInDays": 30
+        },
+        "reasoning": {
+          "whyChosen": "Central log sink for auditability and operational telemetry for all training jobs and related resources.",
+          "alternativesConsidered": [
+            "Azure Monitor basic logs only",
+            "Event Hub direct export only"
+          ],
+          "tradeoffs": "Log Analytics improves queryability and alerting, but incurs ingestion and retention costs."
+        },
+        "dependencies": [],
+        "references": [
+          {
+            "title": "Azure Monitor Logs overview",
+            "url": "https://learn.microsoft.com/azure/azure-monitor/logs/data-platform-logs"
+          }
+        ]
+      },
+      {
+        "name": "kv-mltrain-eus-001",
+        "type": "Microsoft.KeyVault/vaults",
+        "location": "eastus",
+        "sku": "standard",
+        "properties": {
+          "enableRbacAuthorization": true,
+          "enabledForTemplateDeployment": false,
+          "enabledForDiskEncryption": false,
+          "enabledForDeployment": false
+        },
+        "reasoning": {
+          "whyChosen": "Stores secrets, credentials, and future key material used by ML workspace components under least-privilege access.",
+          "alternativesConsidered": [
+            "Workspace-managed secrets only"
+          ],
+          "tradeoffs": "Adds a managed dependency but improves separation of duties and secret governance."
+        },
+        "dependencies": [],
+        "references": [
+          {
+            "title": "Azure Key Vault security baseline",
+            "url": "https://learn.microsoft.com/security/benchmark/azure/baselines/key-vault-security-baseline"
+          }
+        ]
+      },
+      {
+        "name": "ai-mltrain-eus-001",
+        "type": "Microsoft.Insights/components",
+        "subtype": "Application Insights",
+        "location": "eastus",
+        "sku": "workspace-based",
+        "properties": {
+          "Application_Type": "web",
+          "WorkspaceResourceId": "[resourceId('Microsoft.OperationalInsights/workspaces', 'log-mltrain-eus-001')]"
+        },
+        "reasoning": {
+          "whyChosen": "Supports end-to-end observability for ML workflows and workspace-level diagnostics.",
+          "alternativesConsidered": [
+            "No App Insights (Log Analytics only)"
+          ],
+          "tradeoffs": "Adds telemetry richness and troubleshooting depth at added ingestion cost."
+        },
+        "dependencies": [
+          "log-mltrain-eus-001"
+        ],
+        "dependencyReasoning": "Workspace-based Application Insights requires a Log Analytics workspace.",
+        "references": [
+          {
+            "title": "Workspace-based Application Insights",
+            "url": "https://learn.microsoft.com/azure/azure-monitor/app/create-workspace-resource"
+          }
+        ]
+      },
+      {
+        "name": "acrmltraineus001",
+        "type": "Microsoft.ContainerRegistry/registries",
+        "location": "eastus",
+        "sku": "Standard",
+        "properties": {
+          "adminUserEnabled": false,
+          "publicNetworkAccess": "Disabled"
+        },
+        "reasoning": {
+          "whyChosen": "Hosts training environment images with secure, private-by-default access posture.",
+          "alternativesConsidered": [
+            "Basic SKU ACR",
+            "Microsoft-hosted curated images only"
+          ],
+          "tradeoffs": "Standard SKU adds cost but supports stronger reliability and feature headroom."
+        },
+        "dependencies": [],
+        "references": [
+          {
+            "title": "Azure Container Registry overview",
+            "url": "https://learn.microsoft.com/azure/container-registry/container-registry-intro"
+          }
+        ]
+      },
+      {
+        "name": "mlw-traineus-001",
+        "type": "Microsoft.MachineLearningServices/workspaces",
+        "subtype": "Azure Machine Learning workspace",
+        "location": "eastus",
+        "sku": "Basic",
+        "properties": {
+          "publicNetworkAccess": "Disabled",
+          "identity": {
+            "type": "SystemAssigned"
+          },
+          "storageAccount": "stmltraineus001",
+          "keyVault": "kv-mltrain-eus-001",
+          "applicationInsights": "ai-mltrain-eus-001",
+          "containerRegistry": "acrmltraineus001"
+        },
+        "reasoning": {
+          "whyChosen": "Azure ML workspace is the managed control plane for secure, repeatable training jobs integrated with ADLS data and logging.",
+          "alternativesConsidered": [
+            "AKS + custom ML orchestration",
+            "Azure Databricks ML-only pipeline"
+          ],
+          "tradeoffs": "Managed workspace simplifies governance and operations, but some networking and compute controls require additional configuration."
+        },
+        "dependencies": [
+          "stmltraineus001",
+          "kv-mltrain-eus-001",
+          "ai-mltrain-eus-001",
+          "acrmltraineus001"
+        ],
+        "dependencyReasoning": "Workspace depends on connected storage, secrets, telemetry, and container image registry.",
+        "references": [
+          {
+            "title": "Azure Machine Learning workspace",
+            "url": "https://learn.microsoft.com/azure/machine-learning/concept-workspace"
+          }
+        ]
+      },
+      {
+        "name": "amlcpu-train-eus-001",
+        "type": "Microsoft.MachineLearningServices/workspaces/computes",
+        "subtype": "AmlCompute",
+        "location": "eastus",
+        "sku": "STANDARD_DS3_V2",
+        "properties": {
+          "computeType": "AmlCompute",
+          "scaleSettings": {
+            "minNodeCount": 0,
+            "maxNodeCount": 4
+          },
+          "enableNodePublicIp": false
+        },
+        "reasoning": {
+          "whyChosen": "Managed training cluster with autoscaling and no public node IPs to reduce attack surface.",
+          "alternativesConsidered": [
+            "Compute instances",
+            "AKS training nodes"
+          ],
+          "tradeoffs": "Autoscale controls cost, but cold starts can increase job startup latency."
+        },
+        "dependencies": [
+          "mlw-traineus-001"
+        ],
+        "dependencyReasoning": "Compute target is provisioned inside the AML workspace.",
+        "references": [
+          {
+            "title": "Set up compute targets for model training",
+            "url": "https://learn.microsoft.com/azure/machine-learning/how-to-create-attach-compute-cluster"
+          }
+        ]
+      },
+      {
+        "name": "diag-mlw-audit-eus-001",
+        "type": "Microsoft.Insights/diagnosticSettings",
+        "location": "eastus",
+        "sku": "n/a",
+        "properties": {
+          "targetResource": "mlw-traineus-001",
+          "workspaceId": "log-mltrain-eus-001",
+          "logs": [
+            {
+              "categoryGroup": "allLogs",
+              "enabled": true
+            }
+          ],
+          "metrics": [
+            {
+              "category": "AllMetrics",
+              "enabled": true
+            }
+          ]
+        },
+        "reasoning": {
+          "whyChosen": "Captures all AML workspace and training job audit logs into Log Analytics for compliance and forensics.",
+          "alternativesConsidered": [
+            "Send diagnostics to Storage only",
+            "No centralized diagnostics"
+          ],
+          "tradeoffs": "Centralized diagnostics improve traceability but increase monitoring costs."
+        },
+        "dependencies": [
+          "mlw-traineus-001",
+          "log-mltrain-eus-001"
+        ],
+        "dependencyReasoning": "Diagnostic settings require both source resource and destination workspace.",
+        "references": [
+          {
+            "title": "Diagnostic settings in Azure Monitor",
+            "url": "https://learn.microsoft.com/azure/azure-monitor/essentials/diagnostic-settings"
+          }
+        ]
+      }
+    ],
+    "overallReasoning": {
+      "summary": "This design uses Azure Machine Learning for managed training orchestration, ADLS Gen2 for secure data and encrypted outputs, and centralized Azure Monitor logging for mandatory audit trails.",
+      "tradeoffs": "Default SKUs reduce complexity and accelerate deployment, but may need right-sizing, private endpoint expansion, and CMK adoption for stricter compliance regimes."
+    },
+    "validation": "All required capabilities are covered: secure data lake storage, encrypted output at rest and in transit, and full training-job audit logging routed to a centralized workspace.",
+    "architecturePrinciples": [
+      "Secure by default",
+      "Least privilege access",
+      "Auditable operations",
+      "Managed services first",
+      "Cost-aware scaling"
+    ],
+    "references": [
+      {
+        "title": "Azure Well-Architected Framework",
+        "url": "https://learn.microsoft.com/azure/well-architected/"
+      },
+      {
+        "title": "Security baseline for Azure Machine Learning",
+        "url": "https://learn.microsoft.com/security/benchmark/azure/baselines/machine-learning-security-baseline"
+      }
+    ]
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "overallScore": 0.92,
+  "dimensions": {
+    "goalAlignment": 0.95,
+    "wafConformance": 0.88,
+    "dependencyCompleteness": 0.95,
+    "deploymentViability": 0.9
+  },
+  "risks": [
+    "No managed identity resource explicitly defined — identity-based auth is configured on the ML workspace (systemDatastoresAuthMode: Identity) but no User-Assigned Managed Identity resource exists in the plan to facilitate cross-service access",
+    "ACR encryption status is set to 'enabled' but lacks accompanying keyVaultProperties and identity configuration — deployment will require these values to be provided at IaC authoring time",
+    "No resource tagging strategy defined for cost allocation, environment classification, or compliance tracking across the seven resources",
+    "No explicit diagnostic settings resources to route resource-level platform logs (e.g., Storage, Key Vault, ACR audit logs) to the Log Analytics workspace",
+    "Standard_DS3_v2 (4 vCPU, 14 GB RAM) may be undersized for production ML training workloads — evaluate actual model requirements",
+    "Key Vault access model not specified (enableRbacAuthorization) — RBAC model is recommended over access policies per Azure best practices",
+    "No backup or disaster recovery strategy documented for Key Vault secrets, ML workspace metadata, or trained model artifacts"
+  ],
+  "correctionsRecommended": [
+    "Add a Microsoft.ManagedIdentity/userAssignedIdentities resource and reference it from the ML workspace, ACR, and storage account for identity-based access",
+    "Complete ACR encryption configuration by adding keyVaultProperties (keyIdentifier referencing a Key Vault key) and an identity reference, or remove the encryption.status flag if platform-managed encryption is sufficient",
+    "Add a resource tagging convention (e.g., environment, project, costCenter, owner) to all resources for governance and cost management",
+    "Add Microsoft.Insights/diagnosticSettings resources for Storage, Key Vault, and Container Registry to route platform logs to the Log Analytics workspace for comprehensive audit coverage",
+    "Set enableRbacAuthorization: true on Key Vault to use Azure RBAC instead of access policies, aligning with Azure security best practices",
+    "Evaluate compute SKU sizing against actual training workload requirements — consider GPU-enabled SKUs (e.g., Standard_NC series) if training deep learning models",
+    "Consider adding an Azure Monitor action group and alert rules for training job failures and resource health monitoring"
+  ],
+  "hardDependencies": [],
+  "deployable": 1
+}

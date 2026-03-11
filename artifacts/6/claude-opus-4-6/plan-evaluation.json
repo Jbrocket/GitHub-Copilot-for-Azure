@@ -1,0 +1,30 @@
+{
+  "overallScore": 0.85,
+  "dimensions": {
+    "goalAlignment": 0.95,
+    "wafConformance": 0.62,
+    "dependencyCompleteness": 0.92,
+    "deploymentViability": 0.9
+  },
+  "risks": [
+    "Standard_LRS storage provides no geo-redundancy for the central data lake — a single region failure would cause data loss",
+    "Public network access is enabled on all services (ADF, Synapse, Databricks) — exposes the pipeline to internet-facing attack surface",
+    "No monitoring or diagnostic resources included (Log Analytics workspace, diagnostic settings) — limits operational visibility into pipeline health and failures",
+    "No Key Vault resource for managing secrets and connection strings — credentials may be stored insecurely",
+    "Synapse SQL administrator uses SQL authentication (sqladmin) rather than Entra-only authentication — weaker identity posture",
+    "Databricks public IP is not disabled (enableNoPublicIp: false) — cluster nodes are reachable from the internet",
+    "No resource tagging strategy defined — complicates cost allocation and governance at scale"
+  ],
+  "correctionsRecommended": [
+    "Add a Log Analytics workspace and configure diagnostic settings for ADF, Databricks, and Synapse to enable centralized monitoring",
+    "Add an Azure Key Vault resource for managing secrets, connection strings, and SQL admin credentials",
+    "Upgrade storage redundancy from Standard_LRS to Standard_ZRS or Standard_GRS for production disaster recovery",
+    "Set Synapse managedVirtualNetwork to 'default' and enable preventDataExfiltration for network isolation",
+    "Consider adding private endpoints for Storage, Synapse, and ADF to eliminate public network exposure",
+    "Set Databricks enableNoPublicIp to true to prevent public IP assignment on cluster nodes",
+    "Add RBAC role assignment resources (Storage Blob Data Contributor) for ADF and Synapse managed identities instead of deferring to post-deployment configuration",
+    "Add a resource tagging convention (e.g., environment, costCenter, project) to all resources"
+  ],
+  "hardDependencies": [],
+  "deployable": 1
+}

@@ -1,0 +1,31 @@
+{
+  "overallScore": 0.76,
+  "dimensions": {
+    "goalAlignment": 0.82,
+    "wafConformance": 0.75,
+    "dependencyCompleteness": 0.78,
+    "deploymentViability": 0.65
+  },
+  "risks": [
+    "Application Gateway uses Standard_v2 SKU but includes WAF configuration — WAF requires WAF_v2 SKU and will fail deployment",
+    "SQL Server has publicNetworkAccess set to 'Enabled' — Azure security best practices recommend private endpoints for production databases to prevent data exfiltration",
+    "Container Registry has publicNetworkAccess set to 'Enabled' — consider restricting via private endpoint for production workloads",
+    "No Log Analytics workspace resource defined — AKS omsagent addon is enabled but has no workspace target for telemetry",
+    "Service mesh (Istio) is referenced in overallReasoning but not configured in AKS serviceMeshProfile properties — the user explicitly requested service mesh for traffic control",
+    "No Public IP resource defined for Application Gateway — Standard_v2/WAF_v2 requires a Standard SKU Public IP for internet-facing ingress",
+    "Catalog database uses serverless SKU (GP_S_Gen5_2) with 60-second auto-pause — may introduce cold-start latency for user-facing catalog queries in an e-commerce workload"
+  ],
+  "correctionsRecommended": [
+    "Change Application Gateway SKU from 'Standard_v2' to 'WAF_v2' and tier to 'WAF_v2' to support the included webApplicationFirewall configuration",
+    "Add a Log Analytics workspace resource (Microsoft.OperationalInsights/workspaces) and reference its ID in the AKS omsagent addon logAnalyticsWorkspaceResourceID property",
+    "Add Istio service mesh addon configuration to AKS properties (serviceMeshProfile with mode 'Istio') to fulfill the user's service mesh requirement",
+    "Add a Public IP resource (Microsoft.Network/publicIPAddresses, Standard SKU, Static allocation) and reference it in the Application Gateway frontendIPConfiguration",
+    "Set SQL Server publicNetworkAccess to 'Disabled' and add a private endpoint resource for VNet-based connectivity from AKS",
+    "Consider setting ACR publicNetworkAccess to 'Disabled' and configuring a private endpoint, with AKS using managed identity acrPull role assignment for image access",
+    "Add an explicit dependency from AKS to ACR for managed identity-based image pull (acrPull role assignment resource)"
+  ],
+  "hardDependencies": [
+    "Application Gateway SKU 'Standard_v2' conflicts with included webApplicationFirewall properties — Standard_v2 does not support WAF; deployment will fail unless SKU is changed to 'WAF_v2'"
+  ],
+  "deployable": 0
+}

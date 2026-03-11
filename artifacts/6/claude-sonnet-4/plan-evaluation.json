@@ -1,0 +1,31 @@
+{
+  "overallScore": 0.87,
+  "dimensions": {
+    "goalAlignment": 0.95,
+    "wafConformance": 0.65,
+    "dependencyCompleteness": 0.92,
+    "deploymentViability": 0.95
+  },
+  "risks": [
+    "All services have publicNetworkAccess enabled — no private endpoints configured, increasing attack surface",
+    "Storage account uses Standard_LRS with no zone or geo redundancy — single-zone failure could cause data loss for sales data",
+    "No Azure Key Vault resource for secure credential and secret management across Data Factory, Databricks, and Synapse",
+    "No monitoring or logging resources (Log Analytics workspace, diagnostic settings) for operational visibility",
+    "Databricks workspace lacks VNet injection — WAF strongly recommends virtual network injection for network isolation and egress control",
+    "Synapse managed virtual network is set to 'default' but data exfiltration protection is not explicitly enabled",
+    "Databricks and Synapse managed identities are not explicitly configured — only Data Factory has SystemAssigned identity declared"
+  ],
+  "correctionsRecommended": [
+    "Add an Azure Key Vault resource for centralized credential and secret management, and integrate with Data Factory and Databricks",
+    "Add a Log Analytics workspace and configure diagnostic settings on all resources for monitoring, alerting, and troubleshooting",
+    "Upgrade storage redundancy from Standard_LRS to Standard_ZRS or Standard_GRS for resilience against zone or regional failures",
+    "Configure private endpoints for Storage, Data Factory, Databricks, and Synapse to eliminate public network exposure",
+    "Enable VNet injection for the Databricks workspace with custom NSG rules and secure cluster connectivity",
+    "Enable data exfiltration protection on the Synapse workspace by setting managedVirtualNetwork outbound restrictions to approved targets only",
+    "Add SystemAssigned managed identity to Databricks and Synapse workspace resources for consistent identity-based authentication",
+    "Add resource tags (environment, project, costCenter) across all resources for governance and cost tracking",
+    "Consider adding Data Factory dependency on Databricks to reflect the orchestration relationship in the ETL pipeline"
+  ],
+  "hardDependencies": [],
+  "deployable": 1
+}

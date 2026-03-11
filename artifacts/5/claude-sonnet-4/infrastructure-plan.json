@@ -1,0 +1,206 @@
+{
+  "meta": {
+    "planId": "plan-pdf-converter-001",
+    "generatedAt": "2026-03-11T13:11:03.251Z",
+    "version": "0.1-draft",
+    "status": "draft"
+  },
+  "inputs": {
+    "userGoal": "Launch a cloud-based webhook-driven PDF converter using Azure Functions, persist job metadata in Cosmos DB, and use Azure Key Vault for secrets. Assume all defaults to make the plan."
+  },
+  "plan": {
+    "resources": [
+      {
+        "name": "rg-pdf-converter-prod-001",
+        "type": "Microsoft.Resources/resourceGroups",
+        "location": "eastus",
+        "sku": "Standard",
+        "properties": {},
+        "reasoning": {
+          "whyChosen": "Resource group provides logical container for all related resources in the PDF converter solution. East US chosen as primary region for mainstream service availability and low latency.",
+          "alternativesConsidered": ["West US 2", "Central US"],
+          "tradeoffs": "East US provides excellent service availability and reasonable costs, but not geographically distributed for global workloads."
+        },
+        "dependencies": [],
+        "references": [
+          {
+            "title": "Azure Resource Groups",
+            "url": "https://learn.microsoft.com/azure/azure-resource-manager/management/manage-resource-groups-portal"
+          }
+        ]
+      },
+      {
+        "name": "st-pdfconverter-prod-001",
+        "type": "Microsoft.Storage/storageAccounts",
+        "location": "eastus",
+        "sku": "Standard_LRS",
+        "properties": {
+          "kind": "StorageV2",
+          "accessTier": "Hot",
+          "allowBlobPublicAccess": false,
+          "supportsHttpsTrafficOnly": true,
+          "minimumTlsVersion": "TLS1_2"
+        },
+        "reasoning": {
+          "whyChosen": "Required for Azure Functions runtime storage. StorageV2 with LRS provides cost-effective storage with local redundancy. Hot tier for frequently accessed runtime artifacts.",
+          "alternativesConsidered": ["Standard_GRS", "Standard_ZRS"],
+          "tradeoffs": "LRS is cost-effective but provides only local redundancy. Chosen for non-critical function runtime storage."
+        },
+        "dependencies": ["rg-pdf-converter-prod-001"],
+        "dependencyReasoning": "Storage account must be deployed within the resource group.",
+        "references": [
+          {
+            "title": "Storage Account Overview",
+            "url": "https://learn.microsoft.com/azure/storage/common/storage-account-overview"
+          }
+        ]
+      },
+      {
+        "name": "cosmos-pdf-converter-prod-001",
+        "type": "Microsoft.DocumentDB/databaseAccounts",
+        "location": "eastus",
+        "sku": "Standard",
+        "properties": {
+          "kind": "GlobalDocumentDB",
+          "databaseAccountOfferType": "Standard",
+          "consistencyPolicy": {
+            "defaultConsistencyLevel": "Session"
+          },
+          "enableAutomaticFailover": false,
+          "enableMultipleWriteLocations": false,
+          "enableFreeTier": false,
+          "publicNetworkAccess": "Enabled"
+        },
+        "reasoning": {
+          "whyChosen": "Cosmos DB NoSQL API provides scalable document storage for PDF job metadata with flexible schema. Session consistency balances performance and data consistency for job tracking.",
+          "alternativesConsidered": ["Azure SQL Database", "Azure Table Storage"],
+          "tradeoffs": "Higher cost than Table Storage but provides better query flexibility and schema evolution for complex job metadata."
+        },
+        "dependencies": ["rg-pdf-converter-prod-001"],
+        "dependencyReasoning": "Cosmos DB account must be deployed within the resource group.",
+        "references": [
+          {
+            "title": "Cosmos DB Overview",
+            "url": "https://learn.microsoft.com/azure/cosmos-db/introduction"
+          }
+        ]
+      },
+      {
+        "name": "kv-pdf-converter-prod-001",
+        "type": "Microsoft.KeyVault/vaults",
+        "location": "eastus",
+        "sku": "standard",
+        "properties": {
+          "enableSoftDelete": true,
+          "enablePurgeProtection": false,
+          "enableRbacAuthorization": true,
+          "softDeleteRetentionInDays": 90,
+          "enabledForTemplateDeployment": true,
+          "publicNetworkAccess": "Enabled"
+        },
+        "reasoning": {
+          "whyChosen": "Key Vault securely stores connection strings, API keys, and other secrets. RBAC authorization provides modern access control. Standard SKU sufficient for software-protected secrets.",
+          "alternativesConsidered": ["Application settings", "Premium SKU"],
+          "tradeoffs": "Standard SKU lacks HSM protection but sufficient for most secrets. RBAC preferred over legacy access policies."
+        },
+        "dependencies": ["rg-pdf-converter-prod-001"],
+        "dependencyReasoning": "Key Vault must be deployed within the resource group.",
+        "references": [
+          {
+            "title": "Key Vault Overview", 
+            "url": "https://learn.microsoft.com/azure/key-vault/general/overview"
+          }
+        ]
+      },
+      {
+        "name": "asp-pdf-converter-prod-001",
+        "type": "Microsoft.Web/serverfarms",
+        "location": "eastus",
+        "sku": "Y1",
+        "properties": {
+          "kind": "functionapp",
+          "reserved": false
+        },
+        "reasoning": {
+          "whyChosen": "Consumption plan (Y1) provides automatic scaling and pay-per-execution billing perfect for webhook-driven workloads. No cold start concerns for async PDF processing.",
+          "alternativesConsidered": ["Premium EP1", "Dedicated B1"],
+          "tradeoffs": "Consumption has 5-minute execution limit and cold starts, but cost-effective for variable webhook traffic."
+        },
+        "dependencies": ["rg-pdf-converter-prod-001"],
+        "dependencyReasoning": "App Service Plan must be deployed within the resource group.",
+        "references": [
+          {
+            "title": "Functions Hosting Plans",
+            "url": "https://learn.microsoft.com/azure/azure-functions/functions-scale"
+          }
+        ]
+      },
+      {
+        "name": "func-pdf-converter-prod-001",
+        "type": "Microsoft.Web/sites",
+        "location": "eastus",
+        "sku": "Y1",
+        "properties": {
+          "kind": "functionapp",
+          "serverFarmId": "asp-pdf-converter-prod-001",
+          "httpsOnly": true,
+          "siteConfig": {
+            "netFrameworkVersion": "v8.0",
+            "appSettings": [
+              {
+                "name": "AzureWebJobsStorage",
+                "value": "@Microsoft.KeyVault(SecretUri=https://kv-pdf-converter-prod-001.vault.azure.net/secrets/storage-connection-string/)"
+              },
+              {
+                "name": "FUNCTIONS_EXTENSION_VERSION",
+                "value": "~4"
+              },
+              {
+                "name": "FUNCTIONS_WORKER_RUNTIME",
+                "value": "dotnet-isolated"
+              },
+              {
+                "name": "CosmosDbConnectionString",
+                "value": "@Microsoft.KeyVault(SecretUri=https://kv-pdf-converter-prod-001.vault.azure.net/secrets/cosmos-connection-string/)"
+              }
+            ]
+          }
+        },
+        "reasoning": {
+          "whyChosen": ".NET 8 isolated runtime provides modern development experience. Key Vault references for connection strings follow security best practices. HTTPS-only enforces secure communication.",
+          "alternativesConsidered": ["Python runtime", "Node.js runtime"],
+          "tradeoffs": ".NET provides strong typing and performance for PDF processing, but requires Windows consumption plan."
+        },
+        "dependencies": ["asp-pdf-converter-prod-001", "st-pdfconverter-prod-001", "kv-pdf-converter-prod-001"],
+        "dependencyReasoning": "Function App requires App Service Plan, Storage Account for runtime, and Key Vault for secure configuration.",
+        "references": [
+          {
+            "title": "Azure Functions Overview",
+            "url": "https://learn.microsoft.com/azure/azure-functions/functions-overview"
+          }
+        ]
+      }
+    ],
+    "overallReasoning": {
+      "summary": "Serverless architecture using Azure Functions on Consumption plan for cost-effective webhook processing. Cosmos DB provides scalable metadata storage with flexible schema. Key Vault centralizes secret management following security best practices. All resources deployed to single region for simplicity.",
+      "tradeoffs": "Consumption plan has execution time limits and cold starts, but provides automatic scaling and cost optimization for variable webhook workloads. Single-region deployment reduces complexity but lacks high availability across regions."
+    },
+    "validation": "All resources are co-located in East US for optimal latency. Function App references required storage and secrets through Key Vault. Cosmos DB provides globally unique naming and appropriate consistency for job metadata. Security configured with HTTPS-only, RBAC, and secret management best practices.",
+    "architecturePrinciples": [
+      "Serverless-first for cost optimization",
+      "Security by design with Key Vault integration", 
+      "Scalable data storage with Cosmos DB",
+      "Simple single-region deployment"
+    ],
+    "references": [
+      {
+        "title": "Serverless Web Application",
+        "url": "https://learn.microsoft.com/azure/architecture/reference-architectures/serverless/web-app"
+      },
+      {
+        "title": "Functions Best Practices",
+        "url": "https://learn.microsoft.com/azure/azure-functions/functions-best-practices"
+      }
+    ]
+  }
+}

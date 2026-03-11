@@ -1,0 +1,30 @@
+{
+  "overallScore": 0.74,
+  "dimensions": {
+    "goalAlignment": 0.9,
+    "wafConformance": 0.55,
+    "dependencyCompleteness": 0.72,
+    "deploymentViability": 0.78
+  },
+  "risks": [
+    "No managed identity configured — processor-app uses a connection string (COSMOS_DB_CONNECTION_STRING) to access Cosmos DB instead of managed identity with RBAC, violating least-privilege and credential-free best practices",
+    "No Key Vault resource for secrets management — sensitive values like connection strings are referenced inline rather than stored in Azure Key Vault",
+    "No VNet integration or private endpoints — all resources are publicly accessible, increasing attack surface for Cosmos DB, Container Registry, and the Container Apps environment",
+    "External ingress enabled on processor-app without network restrictions, exposing the processing endpoint to the public internet",
+    "PubSubConnector is not a recognized Azure resource type — it is a conceptual placeholder that will require mapping to an actual Azure service or external integration mechanism before deployment",
+    "No diagnostic settings configured for Event Grid topic, Cosmos DB account, or Container Registry — only Log Analytics workspace exists but is not wired to all resources",
+    "Single-region deployment with no redundancy, availability zones, or failover strategy (acknowledged assumption but still a reliability risk)"
+  ],
+  "correctionsRecommended": [
+    "Add a user-assigned managed identity resource and assign it to processor-app for credential-free access to both ACR (AcrPull role) and Cosmos DB (Cosmos DB Built-in Data Contributor role)",
+    "Replace COSMOS_DB_CONNECTION_STRING environment variable with managed identity-based RBAC authentication to Cosmos DB; disable key-based access on the Cosmos DB account",
+    "Add an Azure Key Vault resource to store any remaining secrets, and reference secrets from Key Vault in the Container App configuration",
+    "Add an explicit dependsOn entry from processor-app to cosmosdb — the app references Cosmos DB but does not declare this dependency",
+    "Add a dependsOn entry from pubsub-connector to ingest-topic — the connector description references ingest-topic but does not declare the dependency",
+    "Configure VNet integration for the Container Apps environment and use private endpoints for Cosmos DB and Container Registry",
+    "Add diagnostic settings resources to route Event Grid topic, Cosmos DB, and Container Registry logs to the Log Analytics workspace",
+    "Clarify or replace PubSubConnector with a concrete Azure resource (e.g., Event Grid partner topic, or document it as an out-of-band external integration)"
+  ],
+  "hardDependencies": [],
+  "deployable": 1
+}

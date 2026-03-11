@@ -1,0 +1,30 @@
+{
+  "overallScore": 0.84,
+  "dimensions": {
+    "goalAlignment": 0.92,
+    "wafConformance": 0.62,
+    "dependencyCompleteness": 0.88,
+    "deploymentViability": 0.92
+  },
+  "risks": [
+    "Online endpoint has publicNetworkAccess Enabled and authMode Key — best practice is to disable public access and use managed identity with a workspace managed VNet",
+    "Single-region deployment (eastus only) with no failover — Cosmos DB locations array contains only one region, offering no geo-redundancy",
+    "Storage account uses Standard_LRS which provides no zone redundancy for ML workspace artifacts",
+    "No managed identity configured for cross-service authentication between ML workspace, endpoint, and Cosmos DB",
+    "Application Insights is missing a Log Analytics workspace dependency (required for workspace-based Application Insights)",
+    "No VNet, private endpoint, or network isolation configured for any resource",
+    "No explicit integration path between the ML online endpoint and Cosmos DB for writing usage activity logs"
+  ],
+  "correctionsRecommended": [
+    "Set publicNetworkAccess to Disabled on the online endpoint and enable workspace managed VNet for network isolation",
+    "Change authMode from Key to managed identity (AADToken) on the online endpoint",
+    "Add a second Cosmos DB region (e.g., westus2) with failoverPriority 1 for geo-redundancy",
+    "Upgrade storage account SKU from Standard_LRS to Standard_ZRS for zone-redundant artifact storage",
+    "Add a Microsoft.OperationalInsights/workspaces resource and reference it from the Application Insights component",
+    "Configure a system-assigned or user-assigned managed identity on the ML workspace with appropriate RBAC roles for Key Vault, Storage, ACR, and Cosmos DB",
+    "Disable key-based authentication on the Cosmos DB account and Storage account in favor of RBAC-based access",
+    "Consider adding diagnostic settings and a resource tagging strategy for operational excellence"
+  ],
+  "hardDependencies": [],
+  "deployable": 1
+}

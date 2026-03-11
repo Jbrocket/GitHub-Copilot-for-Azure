@@ -1,0 +1,38 @@
+{
+  "name": "secure-ml-training-pipeline",
+  "description": "Draft plan for a secure ML training pipeline: ADLSv2 for data, Azure ML for training, audit logging for all jobs, outputs encrypted using customer-managed keys (CMK). Assume defaults for SKUs, regions, and names.",
+  "meta": { "status": "draft", "author": "user-request" },
+  "resources": [
+    { "type": "ResourceGroup", "name": "rg-secure-ml", "properties": {} },
+    { "type": "StorageAccount(ADLSv2)", "name": "stsecuremdatasonly", "properties": { "hierarchicalNamespace": true, "encryption": "MicrosoftManaged" } },
+    { "type": "KeyVault", "name": "kv-secure-ml", "properties": { "softDelete": true, "purgeProtection": true } },
+    { "type": "AzureML.Workspace", "name": "ml-workspace-secure", "properties": {} },
+    { "type": "LogAnalytics.Workspace", "name": "la-audit-logs", "properties": {} }
+  ],
+  "security": {
+    "dataAtRest": "Storage encryption with CMK from KeyVault (recommended)",
+    "dataInTransit": "TLS enforced",
+    "identity": "User-assigned managed identities for compute and services",
+    "rbac": "Least-privilege roles for storage and ML workspace",
+    "network": "Defaults (public endpoints) unless user requests VNet injection"
+  },
+  "auditLogging": {
+    "scope": "All AzureML training jobs and Storage account access",
+    "destination": "Log Analytics and Storage (for retention)",
+    "diagnosticSettings": "Enable diagnostics + send to Log Analytics and storage containers"
+  },
+  "encryptionOfOutputs": {
+    "approach": "Use ADLSv2 or encrypted blob containers encrypted with CMK in Key Vault; configure AML to write outputs to encrypted storage",
+    "kms": "Azure Key Vault CMK (customer-managed key)"
+  },
+  "assumptions": [
+    "Defaults for regions and SKUs",
+    "Subscription has permissions to create Key Vault and assign CMK",
+    "No VNet injection requested (public endpoints)"
+  ],
+  "nextSteps": [
+    "Review and approve this plan (set meta.status to 'approved')",
+    "Choose IaC format: Bicep or Terraform",
+    "After approval, generate IaC under infra/ and proceed to deployment"
+  ]
+}

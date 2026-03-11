@@ -1,0 +1,217 @@
+{
+  "meta": {
+    "planId": "plan-pdf-webhook-converter-001",
+    "generatedAt": "2026-03-11T13:22:30.300Z",
+    "version": "0.1-draft",
+    "status": "draft"
+  },
+  "inputs": {
+    "userGoal": "Launch a cloud-based webhook-driven PDF converter using Azure Functions, persist job metadata in Cosmos DB, and use Azure Key Vault for secrets."
+  },
+  "plan": {
+    "resources": [
+      {
+        "name": "stpdfconvprod001",
+        "type": "Microsoft.Storage/storageAccounts",
+        "subtype": "StorageV2",
+        "location": "eastus",
+        "sku": "Standard_LRS",
+        "properties": {
+          "kind": "StorageV2",
+          "supportsHttpsTrafficOnly": true,
+          "minimumTlsVersion": "TLS1_2",
+          "allowBlobPublicAccess": false
+        },
+        "reasoning": {
+          "whyChosen": "Azure Functions requires a general-purpose storage account for runtime state and supports secure blob storage for PDF payloads and outputs.",
+          "alternativesConsidered": [
+            "Premium storage",
+            "Legacy Storage kind"
+          ],
+          "tradeoffs": "Standard_LRS minimizes cost but does not provide zone redundancy."
+        },
+        "dependencies": [],
+        "references": [
+          {
+            "title": "Storage account overview",
+            "url": "https://learn.microsoft.com/azure/storage/common/storage-account-overview"
+          }
+        ]
+      },
+      {
+        "name": "asp-pdfconv-prod-001",
+        "type": "Microsoft.Web/serverfarms",
+        "subtype": "Function Consumption Plan",
+        "location": "eastus",
+        "sku": "Y1",
+        "properties": {
+          "reserved": true
+        },
+        "reasoning": {
+          "whyChosen": "A Consumption plan gives event-driven scaling and pay-per-execution for webhook-triggered workloads.",
+          "alternativesConsidered": [
+            "Flex Consumption (FC1)",
+            "Premium (EP1)"
+          ],
+          "tradeoffs": "Consumption has potential cold starts and limited advanced networking compared to Premium/Flex tiers."
+        },
+        "dependencies": [],
+        "references": [
+          {
+            "title": "Functions hosting plans",
+            "url": "https://learn.microsoft.com/azure/azure-functions/functions-scale"
+          }
+        ]
+      },
+      {
+        "name": "func-pdfconv-prod-001",
+        "type": "Microsoft.Web/sites",
+        "subtype": "functionapp,linux",
+        "location": "eastus",
+        "sku": "Y1",
+        "properties": {
+          "kind": "functionapp,linux",
+          "httpsOnly": true,
+          "identity": {
+            "type": "SystemAssigned"
+          },
+          "siteConfig": {
+            "linuxFxVersion": "Node|20",
+            "appSettings": [
+              {
+                "name": "AzureWebJobsStorage",
+                "value": "DefaultEndpointsProtocol=https;..."
+              },
+              {
+                "name": "COSMOSDB_ENDPOINT",
+                "value": "https://cosmos-pdfconv-prod-001.documents.azure.com:443/"
+              },
+              {
+                "name": "COSMOSDB_DATABASE",
+                "value": "pdfjobs"
+              },
+              {
+                "name": "COSMOSDB_CONTAINER",
+                "value": "jobs"
+              },
+              {
+                "name": "COSMOSDB_KEY",
+                "value": "@Microsoft.KeyVault(SecretUri=https://kv-pdfconv-prod-001.vault.azure.net/secrets/cosmos-primary-key/)"
+              }
+            ]
+          }
+        },
+        "reasoning": {
+          "whyChosen": "Function App provides native HTTP/webhook endpoints and managed scaling for conversion jobs.",
+          "alternativesConsidered": [
+            "Azure Container Apps",
+            "App Service Web App"
+          ],
+          "tradeoffs": "Functions simplify operations but runtime limits may require moving heavy conversions to durable patterns later."
+        },
+        "dependencies": [
+          "stpdfconvprod001",
+          "asp-pdfconv-prod-001",
+          "cosmos-pdfconv-prod-001",
+          "kv-pdfconv-prod-001"
+        ],
+        "dependencyReasoning": "Function runtime needs storage and plan, and reads Cosmos credentials from Key Vault to write job metadata.",
+        "references": [
+          {
+            "title": "Azure Functions overview",
+            "url": "https://learn.microsoft.com/azure/azure-functions/functions-overview"
+          }
+        ]
+      },
+      {
+        "name": "cosmos-pdfconv-prod-001",
+        "type": "Microsoft.DocumentDB/databaseAccounts",
+        "subtype": "GlobalDocumentDB",
+        "location": "eastus",
+        "sku": "Standard",
+        "properties": {
+          "kind": "GlobalDocumentDB",
+          "databaseAccountOfferType": "Standard",
+          "consistencyPolicy": {
+            "defaultConsistencyLevel": "Session"
+          },
+          "enableAutomaticFailover": false,
+          "enableMultipleWriteLocations": false,
+          "publicNetworkAccess": "Enabled",
+          "sqlDatabase": {
+            "name": "pdfjobs"
+          },
+          "sqlContainer": {
+            "name": "jobs",
+            "partitionKey": "/jobId"
+          }
+        },
+        "reasoning": {
+          "whyChosen": "Cosmos DB NoSQL API offers low-latency JSON document storage suitable for job status metadata and webhook processing state.",
+          "alternativesConsidered": [
+            "Azure Table Storage",
+            "Azure SQL Database"
+          ],
+          "tradeoffs": "Cosmos DB is more expensive than simple table storage but provides richer query and scale capabilities."
+        },
+        "dependencies": [],
+        "references": [
+          {
+            "title": "Cosmos DB overview",
+            "url": "https://learn.microsoft.com/azure/cosmos-db/introduction"
+          }
+        ]
+      },
+      {
+        "name": "kv-pdfconv-prod-001",
+        "type": "Microsoft.KeyVault/vaults",
+        "subtype": "Vault",
+        "location": "eastus",
+        "sku": "standard",
+        "properties": {
+          "enableSoftDelete": true,
+          "enablePurgeProtection": true,
+          "enableRbacAuthorization": true,
+          "softDeleteRetentionInDays": 90,
+          "publicNetworkAccess": "Enabled"
+        },
+        "reasoning": {
+          "whyChosen": "Key Vault centralizes secrets so Cosmos DB credentials are not embedded in code or plain app settings.",
+          "alternativesConsidered": [
+            "Function App settings only",
+            "Managed HSM"
+          ],
+          "tradeoffs": "Adds RBAC and secret lifecycle management overhead but significantly improves security posture."
+        },
+        "dependencies": [],
+        "references": [
+          {
+            "title": "Key Vault overview",
+            "url": "https://learn.microsoft.com/azure/key-vault/general/overview"
+          }
+        ]
+      }
+    ],
+    "overallReasoning": {
+      "summary": "This architecture uses serverless compute for webhook ingestion and conversion orchestration, Cosmos DB for metadata persistence, and Key Vault for secret governance while keeping cost and operations low with default regional, single-region deployment choices.",
+      "tradeoffs": "Single-region defaults reduce complexity and cost but lower resiliency; workloads with strict SLA should add zone redundancy, failover, and private networking."
+    },
+    "validation": "All resources are co-located in eastus and dependencies align with Function App runtime, data, and secret access requirements.",
+    "architecturePrinciples": [
+      "Serverless-first",
+      "Secure secret management",
+      "Managed PaaS services",
+      "Cost-aware defaults"
+    ],
+    "references": [
+      {
+        "title": "Azure Well-Architected Framework",
+        "url": "https://learn.microsoft.com/azure/well-architected/"
+      },
+      {
+        "title": "Azure Functions hosting plans",
+        "url": "https://learn.microsoft.com/azure/azure-functions/functions-scale"
+      }
+    ]
+  }
+}

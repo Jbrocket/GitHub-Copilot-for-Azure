@@ -1,0 +1,30 @@
+{
+  "overallScore": 0.86,
+  "dimensions": {
+    "goalAlignment": 0.95,
+    "wafConformance": 0.7,
+    "dependencyCompleteness": 0.93,
+    "deploymentViability": 0.85
+  },
+  "risks": [
+    "No managed identity configured — Service Bus and Cosmos DB accessed via connection strings in Container App secrets, contradicting the plan's own 'secure defaults with managed identity' principle",
+    "No Key Vault resource for secret management — secrets are stored directly in Container App configuration",
+    "Public network access enabled on both Event Grid topic and Cosmos DB account — no network isolation",
+    "No zone redundancy — Container Apps Environment (zoneRedundant: false) and Cosmos DB (isZoneRedundant: false) are single-zone, single-region with no automatic failover",
+    "Dapr component secretRef 'servicebus-connection-string' references a secret that is not defined at the component level — in Azure Container Apps, Dapr component secrets must be declared on the component resource itself",
+    "No Container Registry resource included — Container App image placeholder '<your-registry>/event-processor:latest' has no corresponding ACR resource or AcrPull role assignment",
+    "No VNet integration for any resource — all services communicate over public endpoints"
+  ],
+  "correctionsRecommended": [
+    "Add a User-Assigned Managed Identity resource and attach it to the Container App; use RBAC role assignments (e.g., Azure Service Bus Data Receiver, Cosmos DB Built-in Data Contributor) instead of connection strings",
+    "Add an Azure Key Vault resource and reference secrets from Key Vault rather than storing them inline in Container App configuration",
+    "Add an Azure Container Registry resource with an AcrPull role assignment for the managed identity so the Container App can pull the event-processor image",
+    "Define secrets on the Dapr component resource itself or use managed identity-based metadata for the Service Bus Dapr component",
+    "Consider disabling public network access on Cosmos DB and Event Grid; add VNet integration with private endpoints for production workloads",
+    "Enable zone redundancy on Container Apps Environment and enable automatic failover on Cosmos DB for production resilience",
+    "Add CORS policy configuration on the Container App ingress as required by Azure deployment best practices",
+    "Connect the Container Apps Environment to Log Analytics using explicit logAnalyticsConfiguration with customerId and sharedKey properties"
+  ],
+  "hardDependencies": [],
+  "deployable": 1
+}

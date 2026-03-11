@@ -1,0 +1,157 @@
+{
+  "meta": {
+    "planId": "plan-pdf-converter",
+    "generatedAt": "2026-03-11T13:17:50.369Z",
+    "version": "1.1.0",
+    "status": "draft"
+  },
+  "inputs": {
+    "userGoal": "Launch a cloud-based webhook-driven PDF converter using Azure Functions, persist job metadata in Cosmos DB, and use Azure Key Vault for secrets."
+  },
+  "plan": {
+    "resources": [
+      {
+        "name": "kv-pdfconverter-dev-001",
+        "type": "Microsoft.KeyVault/vaults",
+        "subtype": "Key Vault",
+        "location": "eastus",
+        "sku": "standard",
+        "properties": {
+          "sku": {
+            "family": "A",
+            "name": "standard"
+          },
+          "tenantId": "[subscription().tenantId]",
+          "enableRbacAuthorization": true,
+          "enableSoftDelete": true
+        },
+        "reasoning": {
+          "whyChosen": "Standard tier is sufficient for secret management. RBAC authorization is modern best practice for security.",
+          "alternativesConsidered": ["Premium"],
+          "tradeoffs": "Standard lacks HSM backing but is cost-effective for general secrets."
+        },
+        "dependencies": [],
+        "references": [
+          { "title": "Key Vault Overview", "url": "https://learn.microsoft.com/azure/key-vault/general/overview" }
+        ]
+      },
+      {
+        "name": "stpdfconverterdev001",
+        "type": "Microsoft.Storage/storageAccounts",
+        "subtype": "StorageV2",
+        "location": "eastus",
+        "sku": "Standard_LRS",
+        "properties": {
+          "kind": "StorageV2",
+          "minimumTlsVersion": "TLS1_2",
+          "supportsHttpsTrafficOnly": true
+        },
+        "reasoning": {
+          "whyChosen": "Required by Function App for state management and code storage. LRS is cost-effective for dev.",
+          "alternativesConsidered": ["Standard_GRS", "Premium_LRS"],
+          "tradeoffs": "LRS offers lower durability than GRS but is sufficient for development/testing."
+        },
+        "dependencies": [],
+        "references": [
+          { "title": "Storage Account Overview", "url": "https://learn.microsoft.com/azure/storage/common/storage-account-overview" }
+        ]
+      },
+      {
+        "name": "cosmos-pdfconverter-dev-001",
+        "type": "Microsoft.DocumentDB/databaseAccounts",
+        "subtype": "GlobalDocumentDB",
+        "location": "eastus",
+        "sku": "Standard",
+        "properties": {
+          "databaseAccountOfferType": "Standard",
+          "locations": [
+            {
+              "locationName": "eastus",
+              "failoverPriority": 0,
+              "isZoneRedundant": false
+            }
+          ],
+          "consistencyPolicy": {
+            "defaultConsistencyLevel": "Session"
+          }
+        },
+        "reasoning": {
+          "whyChosen": "NoSQL API is flexible for metadata. Session consistency provides good balance of performance and consistency.",
+          "alternativesConsidered": ["MongoDB API", "PostgreSQL"],
+          "tradeoffs": "NoSQL requires careful schema design for complex queries compared to SQL."
+        },
+        "dependencies": [],
+        "references": [
+          { "title": "Cosmos DB Overview", "url": "https://learn.microsoft.com/azure/cosmos-db/introduction" }
+        ]
+      },
+      {
+        "name": "asp-pdfconverter-dev-001",
+        "type": "Microsoft.Web/serverfarms",
+        "subtype": "linux",
+        "location": "eastus",
+        "sku": "Y1",
+        "properties": {
+          "reserved": true
+        },
+        "reasoning": {
+          "whyChosen": "Consumption plan (Y1) is cost-effective for event-driven workloads like webhooks.",
+          "alternativesConsidered": ["Premium (EP1)", "Dedicated (B1)"],
+          "tradeoffs": "Potential cold starts with Consumption plan compared to Premium."
+        },
+        "dependencies": [],
+        "references": [
+          { "title": "App Service Plan Overview", "url": "https://learn.microsoft.com/azure/app-service/overview-hosting-plans" }
+        ]
+      },
+      {
+        "name": "func-pdfconverter-dev-001",
+        "type": "Microsoft.Web/sites",
+        "subtype": "functionapp,linux",
+        "location": "eastus",
+        "sku": "Y1",
+        "properties": {
+          "serverFarmId": "[resourceId('Microsoft.Web/serverfarms', 'asp-pdfconverter-dev-001')]",
+          "siteConfig": {
+            "linuxFxVersion": "PYTHON|3.11",
+            "appSettings": [
+              {
+                "name": "AzureWebJobsStorage",
+                "value": "[concat('DefaultEndpointsProtocol=https;AccountName=', 'stpdfconverterdev001', ';AccountKey=', listKeys(resourceId('Microsoft.Storage/storageAccounts', 'stpdfconverterdev001'), '2023-01-01').keys[0].value)]"
+              },
+              {
+                "name": "FUNCTIONS_EXTENSION_VERSION",
+                "value": "~4"
+              },
+              {
+                "name": "FUNCTIONS_WORKER_RUNTIME",
+                "value": "python"
+              },
+              {
+                "name": "COSMOS_DB_CONNECTION_STRING",
+                "value": "[listConnectionStrings(resourceId('Microsoft.DocumentDB/databaseAccounts', 'cosmos-pdfconverter-dev-001'), '2024-05-15').connectionStrings[0].connectionString]"
+              }
+            ]
+          },
+          "httpsOnly": true
+        },
+        "reasoning": {
+          "whyChosen": "Python is excellent for PDF processing libraries. Linux functions are performant.",
+          "alternativesConsidered": ["Windows .NET"],
+          "tradeoffs": "Linux consumption has some limitations on VNet integration compared to Premium."
+        },
+        "dependencies": ["asp-pdfconverter-dev-001", "stpdfconverterdev001", "cosmos-pdfconverter-dev-001"],
+        "references": [
+          { "title": "Azure Functions Overview", "url": "https://learn.microsoft.com/azure/azure-functions/functions-overview" }
+        ]
+      }
+    ],
+    "overallReasoning": {
+      "summary": "Serverless architecture using Azure Functions for compute, Cosmos DB for metadata storage, and Key Vault for security. This design is scalable and cost-effective for event-driven PDF processing.",
+      "tradeoffs": "Cold starts may affect latency for the first request. Consumption plan limits execution time to 5-10 minutes."
+    },
+    "validation": "Resources are compatible. Python runtime is supported on Linux Consumption plan.",
+    "architecturePrinciples": ["Serverless", "Event-driven", "Secure by default"],
+    "references": []
+  }
+}

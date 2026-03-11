@@ -1,0 +1,31 @@
+{
+  "overallScore": 0.84,
+  "dimensions": {
+    "goalAlignment": 0.92,
+    "wafConformance": 0.68,
+    "dependencyCompleteness": 0.82,
+    "deploymentViability": 0.93
+  },
+  "risks": [
+    "Single-region deployment (eastus only) with no failover strategy — a regional outage would take down the entire solution",
+    "ACR adminUserEnabled is true — weaker security posture; Microsoft recommends disabling admin user and using managed identity or service principal",
+    "No managed identity or Key Vault resource — connection strings and secrets between services lack a centralized secure store",
+    "Cosmos DB Serverless is single-region only with a 5000 RU/request ceiling — not suitable for high-volume production without migration to provisioned throughput",
+    "Service Bus Basic tier lacks zone redundancy, geo-disaster recovery, topics/subscriptions, and duplicate detection",
+    "No Azure Communication Services (or Twilio) resource defined — Logic App SMS connector requires an external SMS provider that is not represented in the plan",
+    "All resources have public network access enabled with no private endpoints or VNet integration",
+    "Log Analytics workspace is present but no diagnostic settings are defined on other resources to route logs to it"
+  ],
+  "correctionsRecommended": [
+    "Add an Azure Communication Services resource (Microsoft.Communication/communicationServices) to provide the SMS capability that Logic Apps references",
+    "Disable ACR admin user (adminUserEnabled: false) and configure managed identity or RBAC-based authentication for IoT Edge image pulls",
+    "Add an Azure Key Vault resource to store connection strings, Service Bus keys, and Cosmos DB credentials securely",
+    "Add explicit IoT Hub → ACR dependency since IoT Edge deployment manifests reference container images in ACR",
+    "Add diagnostic settings dependencies from IoT Hub, Stream Analytics, Cosmos DB, Service Bus, and Logic Apps to the Log Analytics workspace",
+    "Consider upgrading Service Bus to Standard tier if publish-subscribe fan-out or duplicate detection is needed in the future",
+    "Evaluate adding private endpoints for Cosmos DB, IoT Hub, and Service Bus for production network isolation",
+    "Add resource tags (environment, project, cost-center) across all resources for governance and cost tracking"
+  ],
+  "hardDependencies": [],
+  "deployable": 1
+}

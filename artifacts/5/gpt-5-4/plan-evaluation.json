@@ -1,0 +1,29 @@
+{
+  "overallScore": 0.85,
+  "dimensions": {
+    "goalAlignment": 0.95,
+    "wafConformance": 0.72,
+    "dependencyCompleteness": 0.85,
+    "deploymentViability": 0.88
+  },
+  "risks": [
+    "No RBAC role assignments for managed identity — Key Vault Secrets User, Storage Blob Data Owner/Contributor, Storage Queue Data Contributor, Storage Table Data Contributor, and Cosmos DB data-plane roles are absent, so the Function App cannot access dependent services at runtime",
+    "Cosmos DB has publicNetworkAccess set to Enabled with no private endpoint — data plane is exposed to the public internet",
+    "Consumption plan (Y1) is used instead of the recommended Flex Consumption (FC1) plan, which offers better cold-start performance and VNet integration",
+    "5-minute default execution timeout on Consumption plan may cause failures for large PDF conversions",
+    "Storage account does not explicitly disable local auth (allowSharedKeyAccess not set to false), leaving key-based access open",
+    "No diagnostic settings (Microsoft.Insights/diagnosticSettings) resource defined for the Function App, which is mandatory per IaC deployment rules",
+    "No resource tagging strategy for cost tracking or operational governance"
+  ],
+  "correctionsRecommended": [
+    "Add Microsoft.Authorization/roleAssignments resources granting the managed identity: Key Vault Secrets User on the Key Vault, Storage Blob Data Owner (b7e6dc6d), Storage Blob Data Contributor (ba92f5b4), Storage Queue Data Contributor (974c5e8b), Storage Table Data Contributor (0a9a7e1f), and Monitoring Metrics Publisher (3913510d) on the Storage Account",
+    "Add a Cosmos DB data-plane RBAC role assignment (e.g., Cosmos DB Built-in Data Contributor) for the managed identity to enable passwordless access instead of connection-string-based auth",
+    "Add a Microsoft.Insights/diagnosticSettings resource for the Function App to persist logs to the Log Analytics workspace",
+    "Set allowSharedKeyAccess to false on the Storage Account to disable local key-based auth per Azure best practices",
+    "Consider upgrading from Consumption (Y1) to Flex Consumption (FC1) for VNet integration support, faster cold starts, and network-restricted Key Vault references",
+    "Consider adding private endpoints for Key Vault and Cosmos DB to eliminate public network exposure",
+    "Add a consistent tagging strategy (e.g., environment, project, owner) across all resources"
+  ],
+  "hardDependencies": [],
+  "deployable": 1
+}

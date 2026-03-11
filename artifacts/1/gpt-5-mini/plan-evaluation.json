@@ -1,0 +1,33 @@
+{
+  "overallScore": 0.71,
+  "dimensions": {
+    "goalAlignment": 0.88,
+    "wafConformance": 0.62,
+    "dependencyCompleteness": 0.58,
+    "deploymentViability": 0.75
+  },
+  "risks": [
+    "APIM Consumption tier does not support VNet integration, private endpoints, or Microsoft Entra ID integration — limits network isolation and authentication options for backend services",
+    "No managed identity configured — plan relies on key-based auth for OpenAI and Cosmos DB, contrary to Azure security best practices",
+    "Single-region Cosmos DB with no failover or multi-region replication — risk of data unavailability during regional outages",
+    "API host resource type is ambiguous ('Azure Container App / Function App') — cannot generate valid IaC without a concrete ARM resource type",
+    "Missing supporting infrastructure resources (Log Analytics Workspace, Container Apps Environment or App Service Plan) required by the chosen compute host",
+    "No availability zone or redundancy configuration for any resource — reduced resilience for a real-time API workload"
+  ],
+  "correctionsRecommended": [
+    "Resolve API host to a concrete ARM resource type (Microsoft.App/containerApps or Microsoft.Web/sites) and add the required parent resources",
+    "Add a user-assigned managed identity and use RBAC-based access for Cosmos DB, Key Vault, and Azure OpenAI instead of key-based auth",
+    "Add Log Analytics Workspace (Microsoft.OperationalInsights/workspaces) — required for Container Apps Environment diagnostics",
+    "Add Container Apps Environment (Microsoft.App/managedEnvironments) if using Container Apps, or a Storage Account if using Functions",
+    "Add explicit dependsOn entries: apiHost → openai, apiHost → cosmosAccount, apiHost → keyVault, apiManagement → apiHost",
+    "Consider upgrading APIM from Consumption to Standard v2 tier to enable VNet integration and Entra ID support",
+    "Enable Cosmos DB vector search (vector indexing policy) on the documents container for efficient embedding retrieval",
+    "Add a resource tagging strategy for cost allocation and operational governance"
+  ],
+  "hardDependencies": [
+    "API host resource type must be resolved to a specific ARM resource type before IaC generation",
+    "Container Apps Environment and Log Analytics Workspace must be added if Container Apps is the chosen host",
+    "Storage Account with StorageV2 kind must be added if Azure Functions is the chosen host"
+  ],
+  "deployable": 1
+}

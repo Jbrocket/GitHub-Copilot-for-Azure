@@ -1,0 +1,245 @@
+{
+  "meta": {
+    "planId": "ml-pipeline-plan-001",
+    "generatedAt": "2026-03-11T13:11:03.047Z",
+    "version": "0.1-draft",
+    "status": "draft"
+  },
+  "inputs": {
+    "userGoal": "Build a secure ML training pipeline with data stored in Azure Data Lake, enable audit logging for all training jobs, and encrypt all outputs."
+  },
+  "plan": {
+    "resources": [
+      {
+        "name": "stdatalakeprod001",
+        "type": "Microsoft.Storage/storageAccounts",
+        "subtype": "Data Lake Storage Gen2",
+        "location": "eastus",
+        "sku": "Standard_ZRS",
+        "properties": {
+          "kind": "StorageV2",
+          "accessTier": "Hot",
+          "isHnsEnabled": true,
+          "supportsHttpsTrafficOnly": true,
+          "minimumTlsVersion": "TLS1_2",
+          "allowBlobPublicAccess": false,
+          "encryption": {
+            "keySource": "Microsoft.Storage",
+            "requireInfrastructureEncryption": true
+          },
+          "networkAcls": {
+            "defaultAction": "Deny"
+          }
+        },
+        "reasoning": {
+          "whyChosen": "Azure Data Lake Storage Gen2 provides hierarchical namespace for big data analytics, optimized for ML training data. ZRS provides zone redundancy for high availability. Infrastructure encryption ensures data protection at rest.",
+          "alternativesConsidered": ["Blob Storage", "Azure Files", "Premium Block Blob"],
+          "tradeoffs": "Higher cost due to ZRS and infrastructure encryption, but provides enhanced security and availability required for production ML workloads."
+        },
+        "dependencies": [],
+        "references": [
+          {
+            "title": "Azure Data Lake Storage Gen2 documentation",
+            "url": "https://learn.microsoft.com/azure/storage/blobs/data-lake-storage-introduction"
+          }
+        ]
+      },
+      {
+        "name": "kv-mlpipeline-prod-001",
+        "type": "Microsoft.KeyVault/vaults",
+        "subtype": "Standard",
+        "location": "eastus",
+        "sku": "standard",
+        "properties": {
+          "enabledForDeployment": false,
+          "enabledForTemplateDeployment": false,
+          "enabledForDiskEncryption": false,
+          "enableSoftDelete": true,
+          "softDeleteRetentionInDays": 90,
+          "enablePurgeProtection": true,
+          "publicNetworkAccess": "Disabled",
+          "networkAcls": {
+            "defaultAction": "Deny"
+          }
+        },
+        "reasoning": {
+          "whyChosen": "Key Vault is required for ML workspace creation and provides secure storage for encryption keys and secrets. Purge protection and soft delete ensure compliance and recoverability.",
+          "alternativesConsidered": ["No Key Vault", "Premium tier"],
+          "tradeoffs": "Standard tier sufficient for this use case. Network isolation increases security but requires private endpoints for access."
+        },
+        "dependencies": [],
+        "references": [
+          {
+            "title": "Azure Key Vault documentation",
+            "url": "https://learn.microsoft.com/azure/key-vault/"
+          }
+        ]
+      },
+      {
+        "name": "appi-mlpipeline-prod-001",
+        "type": "Microsoft.Insights/components",
+        "subtype": "Application Insights",
+        "location": "eastus",
+        "sku": "PerGB2018",
+        "properties": {
+          "applicationType": "other",
+          "workspaceResourceId": "[resourceId('Microsoft.OperationalInsights/workspaces', 'law-mlpipeline-prod-001')]",
+          "publicNetworkAccessForIngestion": "Disabled",
+          "publicNetworkAccessForQuery": "Disabled"
+        },
+        "reasoning": {
+          "whyChosen": "Application Insights provides monitoring and logging for ML training jobs. Workspace-based configuration enables centralized log analytics and audit trail.",
+          "alternativesConsidered": ["Standalone App Insights", "No monitoring"],
+          "tradeoffs": "Workspace-based configuration provides better integration with Azure Monitor but requires Log Analytics workspace."
+        },
+        "dependencies": ["law-mlpipeline-prod-001"],
+        "dependencyReasoning": "Requires Log Analytics workspace for workspace-based Application Insights configuration",
+        "references": [
+          {
+            "title": "Application Insights documentation",
+            "url": "https://learn.microsoft.com/azure/azure-monitor/app/app-insights-overview"
+          }
+        ]
+      },
+      {
+        "name": "law-mlpipeline-prod-001", 
+        "type": "Microsoft.OperationalInsights/workspaces",
+        "subtype": "Log Analytics",
+        "location": "eastus",
+        "sku": "PerGB2018",
+        "properties": {
+          "retentionInDays": 90,
+          "publicNetworkAccessForIngestion": "Disabled",
+          "publicNetworkAccessForQuery": "Disabled"
+        },
+        "reasoning": {
+          "whyChosen": "Log Analytics workspace provides centralized audit logging for all training jobs, enabling compliance and monitoring. 90-day retention provides sufficient audit trail.",
+          "alternativesConsidered": ["30-day retention", "No centralized logging"],
+          "tradeoffs": "Longer retention increases costs but provides better audit capabilities for compliance requirements."
+        },
+        "dependencies": [],
+        "references": [
+          {
+            "title": "Log Analytics workspace documentation", 
+            "url": "https://learn.microsoft.com/azure/azure-monitor/logs/log-analytics-workspace-overview"
+          }
+        ]
+      },
+      {
+        "name": "cr-mlpipeline-prod-001",
+        "type": "Microsoft.ContainerRegistry/registries",
+        "subtype": "Container Registry",
+        "location": "eastus",
+        "sku": "Premium",
+        "properties": {
+          "adminUserEnabled": false,
+          "publicNetworkAccess": "Disabled",
+          "networkRuleBypassOptions": "AzureServices",
+          "encryption": {
+            "status": "enabled"
+          }
+        },
+        "reasoning": {
+          "whyChosen": "Container Registry stores custom ML training environments and images. Premium tier provides geo-replication, private endpoints, and encryption capabilities required for secure ML workloads.",
+          "alternativesConsidered": ["Basic tier", "Standard tier"],
+          "tradeoffs": "Premium tier is more expensive but provides enterprise security features and geo-replication for high availability."
+        },
+        "dependencies": [],
+        "references": [
+          {
+            "title": "Azure Container Registry documentation",
+            "url": "https://learn.microsoft.com/azure/container-registry/"
+          }
+        ]
+      },
+      {
+        "name": "mlw-training-prod-001",
+        "type": "Microsoft.MachineLearningServices/workspaces",
+        "subtype": "Default",
+        "location": "eastus",
+        "sku": "Basic",
+        "properties": {
+          "storageAccount": "[resourceId('Microsoft.Storage/storageAccounts', 'stdatalakeprod001')]",
+          "keyVault": "[resourceId('Microsoft.KeyVault/vaults', 'kv-mlpipeline-prod-001')]",
+          "applicationInsights": "[resourceId('Microsoft.Insights/components', 'appi-mlpipeline-prod-001')]",
+          "containerRegistry": "[resourceId('Microsoft.ContainerRegistry/registries', 'cr-mlpipeline-prod-001')]",
+          "hbiWorkspace": true,
+          "publicNetworkAccess": "Disabled",
+          "managedNetwork": {
+            "isolationMode": "AllowOnlyApprovedOutbound"
+          },
+          "systemDatastoresAuthMode": "Identity"
+        },
+        "reasoning": {
+          "whyChosen": "ML workspace provides the foundation for secure ML training pipeline. HBI (High Business Impact) flag enables enhanced security. Network isolation and identity-based auth ensure secure access to training data.",
+          "alternativesConsidered": ["Standard network configuration", "Access key authentication"],
+          "tradeoffs": "Network isolation increases security but requires careful configuration of outbound rules for connectivity."
+        },
+        "dependencies": ["stdatalakeprod001", "kv-mlpipeline-prod-001", "appi-mlpipeline-prod-001", "cr-mlpipeline-prod-001"],
+        "dependencyReasoning": "ML workspace requires all four linked services to be created first - storage, key vault, app insights, and container registry",
+        "references": [
+          {
+            "title": "Azure Machine Learning workspace documentation",
+            "url": "https://learn.microsoft.com/azure/machine-learning/concept-workspace"
+          }
+        ]
+      },
+      {
+        "name": "mlc-training-cluster-001",
+        "type": "Microsoft.MachineLearningServices/workspaces/computes",
+        "subtype": "AmlCompute",
+        "location": "eastus",
+        "sku": "Standard_DS3_v2",
+        "properties": {
+          "computeType": "AmlCompute",
+          "scaleSettings": {
+            "minNodeCount": 0,
+            "maxNodeCount": 4,
+            "nodeIdleTimeBeforeScaleDown": "PT30M"
+          },
+          "vmPriority": "Dedicated",
+          "vmSize": "Standard_DS3_v2",
+          "enableNodePublicIp": false,
+          "isolatedNetwork": false,
+          "osType": "Linux"
+        },
+        "reasoning": {
+          "whyChosen": "Managed compute cluster provides scalable, cost-effective training infrastructure. Auto-scaling from 0-4 nodes optimizes costs while providing adequate compute for training workloads.",
+          "alternativesConsidered": ["Compute instance", "Kubernetes cluster", "Higher SKU"],
+          "tradeoffs": "Standard_DS3_v2 provides good balance of compute and cost. Auto-scaling reduces costs when not in use but may increase training start time."
+        },
+        "dependencies": ["mlw-training-prod-001"],
+        "dependencyReasoning": "Compute cluster must be created within the ML workspace",
+        "references": [
+          {
+            "title": "Azure ML compute targets documentation",
+            "url": "https://learn.microsoft.com/azure/machine-learning/concept-compute-target"
+          }
+        ]
+      }
+    ],
+    "overallReasoning": {
+      "summary": "This architecture provides a secure, compliant ML training pipeline with comprehensive audit logging and encryption. The design emphasizes security through network isolation, identity-based authentication, and encryption at rest and in transit. All components are configured for high availability and compliance requirements.",
+      "tradeoffs": "Higher costs due to premium SKUs and security features, increased complexity due to network isolation, but provides enterprise-grade security and compliance capabilities required for sensitive ML workloads."
+    },
+    "validation": "All resources are properly configured with dependencies. The ML workspace links to all required services (storage, key vault, app insights, container registry). Network isolation is consistently applied across all services. Audit logging flows through Application Insights to Log Analytics workspace providing centralized monitoring.",
+    "architecturePrinciples": [
+      "Security by default with network isolation",
+      "Comprehensive audit logging and monitoring", 
+      "Encryption at rest and in transit",
+      "High availability through zone redundancy",
+      "Cost optimization through auto-scaling compute",
+      "Identity-based authentication over access keys"
+    ],
+    "references": [
+      {
+        "title": "Azure ML security best practices",
+        "url": "https://learn.microsoft.com/azure/machine-learning/concept-enterprise-security"
+      },
+      {
+        "title": "Azure Well-Architected Framework - ML workloads",
+        "url": "https://learn.microsoft.com/azure/well-architected/machine-learning/"
+      }
+    ]
+  }
+}

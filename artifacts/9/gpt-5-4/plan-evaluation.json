@@ -1,0 +1,32 @@
+{
+  "overallScore": 0.83,
+  "dimensions": {
+    "goalAlignment": 0.91,
+    "wafConformance": 0.72,
+    "dependencyCompleteness": 0.78,
+    "deploymentViability": 0.91
+  },
+  "risks": [
+    "Recovery Services Vault is placed in the source region (East US) instead of the Microsoft-recommended target region (West US); if the source region fails, vault management operations including failover initiation may be unavailable.",
+    "Cache storage account (stasrcacheprodeastus001) uses Standard_LRS instead of ZRS; Microsoft recommends zone-redundant storage for the ASR cache to maintain replication during availability zone failures.",
+    "NSGs allow inbound RDP (3389) from any source, exposing VMs to brute-force attacks; production workloads should use Azure Bastion or restrict source IP ranges.",
+    "No replicatedProtectedItems resources are defined, so VMs are not actually enrolled in ASR replication; without these, the plan provisions infrastructure but does not activate replication.",
+    "VM vm-workload-prod-eastus-002 lacks an explicit NIC resource; the dependency reasoning mentions an implicitly created NIC, but the plan should make this dependency explicit.",
+    "Log Analytics workspace (log-dr-prod-eastus-001) exists but no diagnostic settings resources connect ASR, VMs, Traffic Manager, or Automation to it, limiting observability.",
+    "No on-demand capacity reservation in the DR region (West US) to guarantee VM SKU availability during failover.",
+    "Automation Account is located in the source region (East US); during a full source-region outage, the failback runbook may be unreachable."
+  ],
+  "correctionsRecommended": [
+    "Move the Recovery Services Vault (rsv-dr-prod-eastus-001) to West US (target region) so failover operations remain available during a source-region outage.",
+    "Change cache storage account SKU from Standard_LRS to Standard_ZRS for zone-resilient replication staging.",
+    "Replace the open RDP NSG rule with Azure Bastion access or restrict the source address prefix to a known IP range or management subnet.",
+    "Add Microsoft.RecoveryServices/vaults/replicationFabrics/replicationProtectionContainers/replicationProtectedItems resources for vm-workload-prod-eastus-001 and vm-workload-prod-eastus-002 to activate ASR replication.",
+    "Add an explicit NIC resource (nic-vm-prod-eastus-002) for vm-workload-prod-eastus-002 with proper subnet and NSG dependencies.",
+    "Add Microsoft.Insights/diagnosticSettings resources for the Recovery Services Vault, VMs, Traffic Manager, and Automation Account targeting the Log Analytics workspace.",
+    "Add on-demand capacity reservations (Microsoft.Compute/capacityReservationGroups) in West US for the Standard_D2s_v5 SKU to ensure failover compute availability.",
+    "Consider relocating the Automation Account to the DR region (West US) or a neutral third region so failback automation remains accessible during a source-region outage.",
+    "Add an ASR recovery plan resource (Microsoft.RecoveryServices/vaults/replicationRecoveryPlans) to orchestrate multi-VM failover sequencing and integrate the Automation runbook as a post-action."
+  ],
+  "hardDependencies": [],
+  "deployable": 1
+}

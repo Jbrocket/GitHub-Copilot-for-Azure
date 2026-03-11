@@ -1,0 +1,158 @@
+{
+  "meta": {
+    "schema": "1.0.0",
+    "status": "draft",
+    "description": "Disaster Recovery infrastructure with Azure Site Recovery (East US to West US), Traffic Manager for DNS failover, and Automation for failback orchestration."
+  },
+  "resources": [
+    {
+      "id": "rg-source",
+      "type": "Microsoft.Resources/resourceGroups",
+      "name": "rg-app-eastus",
+      "region": "eastus",
+      "properties": {}
+    },
+    {
+      "id": "rg-target",
+      "type": "Microsoft.Resources/resourceGroups",
+      "name": "rg-dr-westus",
+      "region": "westus",
+      "properties": {}
+    },
+    {
+      "id": "vnet-source",
+      "type": "Microsoft.Network/virtualNetworks",
+      "name": "vnet-app-eastus",
+      "region": "eastus",
+      "resource_group": "rg-source",
+      "properties": {
+        "address_space": ["10.1.0.0/16"],
+        "subnets": [
+          {
+            "name": "snet-app",
+            "prefix": "10.1.0.0/24"
+          }
+        ]
+      }
+    },
+    {
+      "id": "vnet-target",
+      "type": "Microsoft.Network/virtualNetworks",
+      "name": "vnet-dr-westus",
+      "region": "westus",
+      "resource_group": "rg-target",
+      "properties": {
+        "address_space": ["10.2.0.0/16"],
+        "subnets": [
+          {
+            "name": "snet-app",
+            "prefix": "10.2.0.0/24"
+          }
+        ]
+      }
+    },
+    {
+      "id": "pip-source",
+      "type": "Microsoft.Network/publicIPAddresses",
+      "name": "pip-app-eastus",
+      "region": "eastus",
+      "resource_group": "rg-source",
+      "properties": {
+        "sku": "Standard",
+        "allocation_method": "Static",
+        "dns_label": "app-eastus-dns"
+      }
+    },
+    {
+      "id": "pip-target",
+      "type": "Microsoft.Network/publicIPAddresses",
+      "name": "pip-app-westus",
+      "region": "westus",
+      "resource_group": "rg-target",
+      "properties": {
+        "sku": "Standard",
+        "allocation_method": "Static",
+        "dns_label": "app-westus-dr-dns"
+      }
+    },
+    {
+      "id": "vm-workload",
+      "type": "Microsoft.Compute/virtualMachines",
+      "name": "vm-app-01",
+      "region": "eastus",
+      "resource_group": "rg-source",
+      "properties": {
+        "size": "Standard_D2s_v3",
+        "image": "Win2019Datacenter",
+        "network_interfaces": [
+          {
+            "subnet_id": "vnet-source/snet-app",
+            "public_ip_id": "pip-source"
+          }
+        ]
+      }
+    },
+    {
+      "id": "rsv-dr",
+      "type": "Microsoft.RecoveryServices/vaults",
+      "name": "rsv-dr-westus",
+      "region": "westus",
+      "resource_group": "rg-target",
+      "properties": {
+        "sku": "RS0"
+      }
+    },
+    {
+      "id": "asr-policy",
+      "type": "Microsoft.RecoveryServices/vaults/replicationPolicies",
+      "name": "policy-asr-default",
+      "region": "westus",
+      "resource_group": "rg-target",
+      "properties": {
+        "vault_id": "rsv-dr",
+        "recovery_point_retention_in_minutes": 1440,
+        "application_consistent_snapshot_frequency_in_minutes": 240
+      }
+    },
+    {
+      "id": "tm-profile",
+      "type": "Microsoft.Network/trafficManagerProfiles",
+      "name": "tm-app-global",
+      "region": "global",
+      "resource_group": "rg-target",
+      "properties": {
+        "routing_method": "Priority",
+        "dns_ttl": 30,
+        "monitor_config": {
+          "protocol": "HTTP",
+          "port": 80,
+          "path": "/"
+        },
+        "endpoints": [
+          {
+            "name": "primary-eastus",
+            "target_resource_id": "pip-source",
+            "priority": 1,
+            "status": "Enabled"
+          },
+          {
+            "name": "failover-westus",
+            "target_resource_id": "pip-target",
+            "priority": 2,
+            "status": "Enabled"
+          }
+        ]
+      }
+    },
+    {
+      "id": "aa-automation",
+      "type": "Microsoft.Automation/automationAccounts",
+      "name": "aa-dr-automation",
+      "region": "westus",
+      "resource_group": "rg-target",
+      "properties": {
+        "sku": "Basic"
+      }
+    }
+  ]
+}

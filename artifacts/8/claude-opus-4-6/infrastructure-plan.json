@@ -1,0 +1,290 @@
+{
+  "meta": {
+    "planId": "plan-recommendation-engine",
+    "generatedAt": "2026-03-11T12:49:24.758Z",
+    "version": "0.1-draft",
+    "status": "draft"
+  },
+  "inputs": {
+    "userGoal": "Deploy a real-time recommendation engine as an Azure ML managed online endpoint, scale for high request volumes, and store usage activity in Cosmos DB."
+  },
+  "plan": {
+    "resources": [
+      {
+        "name": "log-recengine-prod-001",
+        "type": "Microsoft.OperationalInsights/workspaces",
+        "location": "eastus",
+        "sku": "PerGB2018",
+        "properties": {
+          "retentionInDays": 30
+        },
+        "reasoning": {
+          "whyChosen": "Required backing store for workspace-based Application Insights. PerGB2018 is the recommended pay-as-you-go tier for new deployments, supporting the Operational Excellence pillar with centralized log analytics.",
+          "alternativesConsidered": [
+            "CapacityReservation — unnecessary without 100+ GB/day ingestion",
+            "Free tier — 500 MB/day limit too restrictive for production"
+          ],
+          "tradeoffs": "Pay-as-you-go pricing may cost more than CapacityReservation at very high volumes, but avoids commitment risk at launch."
+        },
+        "dependencies": [],
+        "dependencyReasoning": "No dependencies; foundational observability resource.",
+        "references": [
+          {
+            "title": "Log Analytics overview",
+            "url": "https://learn.microsoft.com/azure/azure-monitor/logs/log-analytics-overview"
+          },
+          {
+            "title": "Bicep resource reference (2025-02-01)",
+            "url": "https://learn.microsoft.com/azure/templates/microsoft.operationalinsights/workspaces?pivots=deployment-language-bicep"
+          }
+        ]
+      },
+      {
+        "name": "appi-recengine-prod-001",
+        "type": "Microsoft.Insights/components",
+        "location": "eastus",
+        "sku": "workspace-based",
+        "properties": {
+          "kind": "web",
+          "Application_Type": "web",
+          "WorkspaceResourceId": "[resourceId('Microsoft.OperationalInsights/workspaces', 'log-recengine-prod-001')]"
+        },
+        "reasoning": {
+          "whyChosen": "Provides real-time telemetry and performance monitoring for the ML online endpoint. Workspace-based mode required by current best practices. Supports Operational Excellence and Performance Efficiency pillars.",
+          "alternativesConsidered": [
+            "Classic Application Insights — deprecated, being retired",
+            "Third-party APM — increases vendor dependency"
+          ],
+          "tradeoffs": "Adds ingestion cost to Log Analytics but essential for production monitoring of a high-volume inference endpoint."
+        },
+        "dependencies": [
+          "log-recengine-prod-001"
+        ],
+        "dependencyReasoning": "Workspace-based Application Insights requires a backing Log Analytics workspace.",
+        "references": [
+          {
+            "title": "Application Insights overview",
+            "url": "https://learn.microsoft.com/azure/azure-monitor/app/app-insights-overview"
+          },
+          {
+            "title": "Bicep resource reference (2020-02-02)",
+            "url": "https://learn.microsoft.com/azure/templates/microsoft.insights/components?pivots=deployment-language-bicep"
+          }
+        ]
+      },
+      {
+        "name": "strecengineprod001",
+        "type": "Microsoft.Storage/storageAccounts",
+        "location": "eastus",
+        "sku": "Standard_LRS",
+        "properties": {
+          "kind": "StorageV2",
+          "accessTier": "Hot",
+          "supportsHttpsTrafficOnly": true,
+          "minimumTlsVersion": "TLS1_2",
+          "allowBlobPublicAccess": false
+        },
+        "reasoning": {
+          "whyChosen": "Required linked resource for the ML workspace — stores model artifacts, experiment logs, and pipeline outputs. StorageV2 with Standard_LRS satisfies ML workspace pairing constraint. Supports Security pillar with HTTPS-only and TLS 1.2.",
+          "alternativesConsidered": [
+            "Standard_ZRS — higher cost, not required without zone-redundancy mandate",
+            "Premium_LRS — overkill for ML workspace blob storage workload"
+          ],
+          "tradeoffs": "LRS provides no cross-zone redundancy; acceptable for a single-region deployment but should be upgraded to ZRS for production HA requirements."
+        },
+        "dependencies": [],
+        "dependencyReasoning": "No dependencies; foundational storage resource.",
+        "references": [
+          {
+            "title": "Storage account overview",
+            "url": "https://learn.microsoft.com/azure/storage/common/storage-account-overview"
+          },
+          {
+            "title": "Bicep resource reference (2025-01-01)",
+            "url": "https://learn.microsoft.com/azure/templates/microsoft.storage/storageaccounts?pivots=deployment-language-bicep"
+          }
+        ]
+      },
+      {
+        "name": "kv-recengine-prod-001",
+        "type": "Microsoft.KeyVault/vaults",
+        "location": "eastus",
+        "sku": "standard",
+        "properties": {
+          "enableSoftDelete": true,
+          "softDeleteRetentionInDays": 90,
+          "enableRbacAuthorization": true,
+          "enablePurgeProtection": true
+        },
+        "reasoning": {
+          "whyChosen": "Required linked resource for the ML workspace — stores secrets and keys for model endpoints and service connections. Soft-delete required by ML workspace pairing constraint. RBAC authorization preferred over access policies per current best practices. Supports Security pillar.",
+          "alternativesConsidered": [
+            "Premium SKU — HSM-backed keys not required for this workload",
+            "Azure Managed HSM — overkill for endpoint credential management"
+          ],
+          "tradeoffs": "Standard SKU lacks HSM key protection; acceptable since no regulatory mandate for HSM-backed keys."
+        },
+        "dependencies": [],
+        "dependencyReasoning": "No dependencies; foundational security resource.",
+        "references": [
+          {
+            "title": "Key Vault overview",
+            "url": "https://learn.microsoft.com/azure/key-vault/general/overview"
+          },
+          {
+            "title": "Bicep resource reference (2024-11-01)",
+            "url": "https://learn.microsoft.com/azure/templates/microsoft.keyvault/vaults?pivots=deployment-language-bicep"
+          }
+        ]
+      },
+      {
+        "name": "crrecengineprod001",
+        "type": "Microsoft.ContainerRegistry/registries",
+        "location": "eastus",
+        "sku": "Basic",
+        "properties": {
+          "adminUserEnabled": false
+        },
+        "reasoning": {
+          "whyChosen": "Stores custom Docker images for ML model serving environments. Required when deploying custom inference containers to managed online endpoints. Basic SKU sufficient for a single-region deployment. Supports Operational Excellence pillar with managed image lifecycle.",
+          "alternativesConsidered": [
+            "Standard SKU — more storage (100 GiB vs 10 GiB), upgrade if image volume grows",
+            "Premium SKU — geo-replication and private link, unnecessary for single-region"
+          ],
+          "tradeoffs": "Basic tier has 10 GiB storage limit and no private link; upgrade to Standard or Premium as image count grows or if network isolation is required."
+        },
+        "dependencies": [],
+        "dependencyReasoning": "No dependencies; foundational compute registry resource.",
+        "references": [
+          {
+            "title": "Container Registry overview",
+            "url": "https://learn.microsoft.com/azure/container-registry/container-registry-intro"
+          },
+          {
+            "title": "Bicep resource reference (2025-04-01)",
+            "url": "https://learn.microsoft.com/azure/templates/microsoft.containerregistry/registries?pivots=deployment-language-bicep"
+          }
+        ]
+      },
+      {
+        "name": "mlw-recengine-prod-001",
+        "type": "Microsoft.MachineLearningServices/workspaces",
+        "location": "eastus",
+        "sku": "Basic",
+        "properties": {
+          "identity": {
+            "type": "SystemAssigned"
+          },
+          "storageAccount": "[resourceId('Microsoft.Storage/storageAccounts', 'strecengineprod001')]",
+          "keyVault": "[resourceId('Microsoft.KeyVault/vaults', 'kv-recengine-prod-001')]",
+          "applicationInsights": "[resourceId('Microsoft.Insights/components', 'appi-recengine-prod-001')]",
+          "containerRegistry": "[resourceId('Microsoft.ContainerRegistry/registries', 'crrecengineprod001')]",
+          "publicNetworkAccess": "Enabled",
+          "managedNetwork": {
+            "isolationMode": "Disabled"
+          }
+        },
+        "reasoning": {
+          "whyChosen": "Central resource for hosting the managed online endpoint for the recommendation model. Basic SKU is the default and recommended tier for standard ML workspaces. SystemAssigned identity simplifies RBAC with linked resources. Supports Performance Efficiency pillar through managed compute autoscaling.",
+          "alternativesConsidered": [
+            "Azure Container Apps — lightweight but lacks native ML experiment tracking and model registry",
+            "AKS with custom inference server — more control but much higher operational overhead",
+            "Azure AI Foundry Hub/Project — overkill for a single model endpoint"
+          ],
+          "tradeoffs": "Managed online endpoints simplify deployment and autoscaling but offer less customization than self-managed AKS inference. Public network access enabled for simplicity; lock down in production with managed network isolation."
+        },
+        "dependencies": [
+          "strecengineprod001",
+          "kv-recengine-prod-001",
+          "appi-recengine-prod-001",
+          "crrecengineprod001"
+        ],
+        "dependencyReasoning": "ML workspace requires linked Storage Account and Key Vault (cannot change post-creation). Application Insights and Container Registry are recommended for production monitoring and custom environment support.",
+        "references": [
+          {
+            "title": "Bicep resource reference — ML Workspace (2025-06-01)",
+            "url": "https://learn.microsoft.com/azure/templates/microsoft.machinelearningservices/workspaces?pivots=deployment-language-bicep"
+          },
+          {
+            "title": "Managed online endpoints",
+            "url": "https://learn.microsoft.com/azure/machine-learning/concept-endpoints-online"
+          }
+        ]
+      },
+      {
+        "name": "cosmos-recengine-prod-001",
+        "type": "Microsoft.DocumentDB/databaseAccounts",
+        "location": "eastus",
+        "sku": "Standard",
+        "properties": {
+          "kind": "GlobalDocumentDB",
+          "databaseAccountOfferType": "Standard",
+          "consistencyPolicy": {
+            "defaultConsistencyLevel": "Session"
+          },
+          "locations": [
+            {
+              "locationName": "eastus",
+              "failoverPriority": 0,
+              "isZoneRedundant": false
+            }
+          ],
+          "enableAutomaticFailover": true,
+          "enableMultipleWriteLocations": false,
+          "publicNetworkAccess": "Enabled"
+        },
+        "reasoning": {
+          "whyChosen": "Stores user activity events (clicks, views, purchases) that feed the recommendation engine. Cosmos DB NoSQL API provides single-digit-millisecond reads/writes at any scale with automatic indexing — ideal for high-volume activity logging. Session consistency balances performance and read-your-writes guarantees. Supports Performance Efficiency and Reliability pillars.",
+          "alternativesConsidered": [
+            "Azure SQL Database — schema rigidity is unnecessary for semi-structured activity events",
+            "Azure Table Storage — lacks automatic indexing, change feed, and global distribution",
+            "Azure Event Hubs + Storage — adds complexity for write path without query benefit"
+          ],
+          "tradeoffs": "Cosmos DB is more expensive per GB than Table Storage or Blob Storage, but the automatic indexing, change feed (for downstream ML pipeline retraining), and guaranteed low-latency at scale justify the cost for a real-time recommendation workload."
+        },
+        "dependencies": [],
+        "dependencyReasoning": "Independent data store; no infrastructure dependencies. The recommendation model reads from Cosmos DB at inference time via application-level configuration, not ARM-level dependency.",
+        "references": [
+          {
+            "title": "Cosmos DB overview",
+            "url": "https://learn.microsoft.com/azure/cosmos-db/introduction"
+          },
+          {
+            "title": "Bicep resource reference (2025-04-15)",
+            "url": "https://learn.microsoft.com/azure/templates/microsoft.documentdb/databaseaccounts?pivots=deployment-language-bicep"
+          },
+          {
+            "title": "Consistency levels",
+            "url": "https://learn.microsoft.com/azure/cosmos-db/consistency-levels"
+          }
+        ]
+      }
+    ],
+    "overallReasoning": {
+      "summary": "This architecture deploys a real-time recommendation engine using Azure Machine Learning managed online endpoints for scalable, low-latency inference. The ML workspace is backed by required supporting resources (Storage, Key Vault) and recommended observability (Application Insights, Log Analytics). A Container Registry stores custom model-serving images. Cosmos DB serves as the activity store for high-throughput user event ingestion and real-time reads during inference. All resources are deployed in a single region (eastus) with public network access for simplicity.",
+      "tradeoffs": "Single-region deployment trades geographic redundancy for cost savings and simplicity. LRS storage and non-zone-redundant Cosmos DB should be upgraded for production HA. Public network access is enabled on all resources — production deployments should add managed VNet isolation on the ML workspace and private endpoints on Cosmos DB and Key Vault. Basic ACR SKU limits storage to 10 GiB; upgrade to Standard/Premium as image volume grows."
+    },
+    "validation": "All resources deploy in eastus. ML workspace correctly links to Storage (StorageV2), Key Vault (soft-delete enabled), Application Insights (workspace-based backed by Log Analytics), and Container Registry. Cosmos DB uses Session consistency with single-region writes — no pairing constraint violations. No subnet or network conflicts. All naming follows CAF conventions and passes regex validation.",
+    "architecturePrinciples": [
+      "Performance Efficiency — managed online endpoints autoscale to handle high request volumes",
+      "Operational Excellence — centralized monitoring via Application Insights and Log Analytics",
+      "Security — RBAC-enabled Key Vault, HTTPS-only storage, TLS 1.2 minimum",
+      "Cost Optimization — default/Basic SKUs across the board, scale up as needed",
+      "Reliability — automatic failover on Cosmos DB, session consistency for read-your-writes"
+    ],
+    "references": [
+      {
+        "title": "Azure ML managed online endpoints",
+        "url": "https://learn.microsoft.com/azure/machine-learning/concept-endpoints-online"
+      },
+      {
+        "title": "Cosmos DB for real-time analytics",
+        "url": "https://learn.microsoft.com/azure/cosmos-db/introduction"
+      },
+      {
+        "title": "Azure Well-Architected Framework",
+        "url": "https://learn.microsoft.com/azure/well-architected/"
+      }
+    ]
+  }
+}

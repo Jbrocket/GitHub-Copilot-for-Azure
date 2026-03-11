@@ -1,0 +1,254 @@
+{
+  "meta": {
+    "planId": "plan-dr-eastwest-001",
+    "generatedAt": "2026-03-11T13:22:30.296Z",
+    "version": "0.1-draft",
+    "status": "draft"
+  },
+  "inputs": {
+    "userGoal": "Configure a site recovery plan for disaster failover from East to West Azure region, replicate major VM workloads, and automate DNS failbacks."
+  },
+  "plan": {
+    "resources": [
+      {
+        "name": "vnet-prod-eus",
+        "type": "Microsoft.Network/virtualNetworks",
+        "subtype": "Production VNet",
+        "location": "eastus",
+        "sku": "Standard",
+        "properties": {
+          "addressSpace": "10.10.0.0/16",
+          "subnets": ["app", "data", "management"],
+          "existing": true
+        },
+        "reasoning": {
+          "whyChosen": "Represents the primary East US network boundary hosting critical VM workloads that must be protected.",
+          "alternativesConsidered": ["Flat VNet", "Multiple spoke VNets"],
+          "tradeoffs": "Existing topology is preserved for lower migration risk but may limit DR network simplification."
+        },
+        "dependencies": [],
+        "references": [
+          {
+            "title": "Virtual network in Azure",
+            "url": "https://learn.microsoft.com/azure/virtual-network/virtual-networks-overview"
+          }
+        ]
+      },
+      {
+        "name": "vnet-dr-wus",
+        "type": "Microsoft.Network/virtualNetworks",
+        "subtype": "Disaster Recovery VNet",
+        "location": "westus",
+        "sku": "Standard",
+        "properties": {
+          "addressSpace": "10.20.0.0/16",
+          "subnets": ["app", "data", "management"]
+        },
+        "reasoning": {
+          "whyChosen": "Pre-provisioned target network is required for deterministic VM placement and fast failover execution.",
+          "alternativesConsidered": ["Create network during failover"],
+          "tradeoffs": "Pre-provisioning adds minor standing cost but significantly reduces recovery time objective risk."
+        },
+        "dependencies": [],
+        "references": [
+          {
+            "title": "Prepare target Azure network for disaster recovery",
+            "url": "https://learn.microsoft.com/azure/site-recovery/azure-to-azure-prepare-network"
+          }
+        ]
+      },
+      {
+        "name": "rsv-dr-eus",
+        "type": "Microsoft.RecoveryServices/vaults",
+        "subtype": "Recovery Services vault",
+        "location": "eastus",
+        "sku": "Standard",
+        "properties": {
+          "siteRecovery": true,
+          "crossRegionRecovery": "eastus-to-westus"
+        },
+        "reasoning": {
+          "whyChosen": "Azure Site Recovery for Azure-to-Azure VM replication is anchored on a Recovery Services vault.",
+          "alternativesConsidered": ["Azure Backup only"],
+          "tradeoffs": "Site Recovery adds configuration complexity but provides orchestration and low-RPO replication."
+        },
+        "dependencies": [],
+        "references": [
+          {
+            "title": "Azure Site Recovery architecture for Azure-to-Azure",
+            "url": "https://learn.microsoft.com/azure/site-recovery/azure-to-azure-architecture"
+          }
+        ]
+      },
+      {
+        "name": "stasrcacheeus001",
+        "type": "Microsoft.Storage/storageAccounts",
+        "subtype": "ASR replication cache",
+        "location": "eastus",
+        "sku": "Standard_LRS",
+        "properties": {
+          "kind": "StorageV2",
+          "httpsOnly": true,
+          "minimumTlsVersion": "TLS1_2"
+        },
+        "reasoning": {
+          "whyChosen": "Site Recovery uses cache storage in the source region for replication staging and throughput smoothing.",
+          "alternativesConsidered": ["Premium storage"],
+          "tradeoffs": "Standard_LRS minimizes cost but can provide lower throughput than premium tiers for very high-change workloads."
+        },
+        "dependencies": [],
+        "references": [
+          {
+            "title": "Prepare source for Azure VM disaster recovery",
+            "url": "https://learn.microsoft.com/azure/site-recovery/azure-to-azure-prepare-source"
+          }
+        ]
+      },
+      {
+        "name": "asr-policy-eus-wus",
+        "type": "Microsoft.RecoveryServices/vaults/replicationPolicies",
+        "subtype": "Site Recovery policy",
+        "location": "eastus",
+        "sku": "Standard",
+        "properties": {
+          "recoveryPointRetentionInMinutes": 1440,
+          "appConsistentSnapshotFrequencyInMinutes": 240,
+          "multiVmSyncStatus": "Enable"
+        },
+        "reasoning": {
+          "whyChosen": "Policy defines RPO/RTO behavior and enables multi-VM consistency for major VM workloads.",
+          "alternativesConsidered": ["Per-VM policies", "Longer retention windows"],
+          "tradeoffs": "Longer retention improves rollback options but increases storage consumption and cost."
+        },
+        "dependencies": ["rsv-dr-eus"],
+        "dependencyReasoning": "Replication policy is scoped to the Recovery Services vault.",
+        "references": [
+          {
+            "title": "Configure replication settings for Azure VM disaster recovery",
+            "url": "https://learn.microsoft.com/azure/site-recovery/azure-to-azure-how-to-enable-replication"
+          }
+        ]
+      },
+      {
+        "name": "tm-dr-global",
+        "type": "Microsoft.Network/trafficManagerProfiles",
+        "subtype": "Priority routing profile",
+        "location": "global",
+        "sku": "Standard",
+        "properties": {
+          "routingMethod": "Priority",
+          "monitorProtocol": "HTTPS",
+          "monitorPort": 443,
+          "dnsConfigRelativeName": "dr-workload"
+        },
+        "reasoning": {
+          "whyChosen": "Traffic Manager provides automatic DNS-level failover and failback as endpoint health changes between East and West.",
+          "alternativesConsidered": ["Azure Front Door", "Manual DNS changes"],
+          "tradeoffs": "Traffic Manager is simple and cost-effective for regional endpoint failover but has DNS TTL convergence delay."
+        },
+        "dependencies": [],
+        "references": [
+          {
+            "title": "Traffic Manager disaster recovery",
+            "url": "https://learn.microsoft.com/azure/traffic-manager/traffic-manager-disaster-recovery-using-traffic-manager"
+          }
+        ]
+      },
+      {
+        "name": "dnszone-workload-contoso-com",
+        "type": "Microsoft.Network/dnsZones",
+        "subtype": "Public DNS zone",
+        "location": "global",
+        "sku": "Standard",
+        "properties": {
+          "recordStrategy": "CNAME app -> Traffic Manager profile",
+          "ttlSeconds": 30
+        },
+        "reasoning": {
+          "whyChosen": "Azure DNS hosts authoritative records and delegates endpoint control to Traffic Manager for automated failback.",
+          "alternativesConsidered": ["Direct A-record flips", "Third-party DNS"],
+          "tradeoffs": "Low TTL improves switchover speed but can slightly increase DNS query volume."
+        },
+        "dependencies": ["tm-dr-global"],
+        "dependencyReasoning": "DNS CNAME points to the Traffic Manager profile FQDN.",
+        "references": [
+          {
+            "title": "Azure DNS overview",
+            "url": "https://learn.microsoft.com/azure/dns/dns-overview"
+          }
+        ]
+      },
+      {
+        "name": "func-dns-failback-eus",
+        "type": "Microsoft.Web/sites",
+        "subtype": "Azure Function App",
+        "location": "eastus",
+        "sku": "Y1",
+        "properties": {
+          "runtime": "dotnet-isolated",
+          "managedIdentity": "SystemAssigned",
+          "purpose": "Optional post-failover/failback DNS orchestration and validation"
+        },
+        "reasoning": {
+          "whyChosen": "Function App enables event-driven automation for controlled DNS failback checks and custom workflows.",
+          "alternativesConsidered": ["Logic Apps", "Automation Runbook"],
+          "tradeoffs": "Function App is flexible for custom logic but requires code lifecycle management."
+        },
+        "dependencies": ["dnszone-workload-contoso-com"],
+        "dependencyReasoning": "Function needs RBAC access to update/read DNS records.",
+        "references": [
+          {
+            "title": "Azure Functions event-driven architecture",
+            "url": "https://learn.microsoft.com/azure/azure-functions/functions-overview"
+          }
+        ]
+      },
+      {
+        "name": "evg-asr-events-eus",
+        "type": "Microsoft.EventGrid/systemTopics",
+        "subtype": "Recovery Services event routing",
+        "location": "eastus",
+        "sku": "Standard",
+        "properties": {
+          "source": "rsv-dr-eus",
+          "events": ["Microsoft.RecoveryServices.ReplicationJobCompleted", "Microsoft.RecoveryServices.FailoverCompleted"],
+          "endpoint": "func-dns-failback-eus"
+        },
+        "reasoning": {
+          "whyChosen": "Event Grid triggers DNS orchestration automation immediately after recovery milestones.",
+          "alternativesConsidered": ["Polling jobs", "Manual operations"],
+          "tradeoffs": "Event-driven design reduces manual delay but requires robust function error handling and retries."
+        },
+        "dependencies": ["rsv-dr-eus", "func-dns-failback-eus"],
+        "dependencyReasoning": "System topic source is the Recovery Services vault and sink is the Function endpoint.",
+        "references": [
+          {
+            "title": "Route events from Azure services to Event Grid",
+            "url": "https://learn.microsoft.com/azure/event-grid/system-topics"
+          }
+        ]
+      }
+    ],
+    "overallReasoning": {
+      "summary": "The architecture prioritizes business continuity by combining Azure Site Recovery for VM replication with globally managed DNS failover/failback through Traffic Manager and Azure DNS, plus optional event-driven DNS workflow automation.",
+      "tradeoffs": "This default plan favors resilience and automation over minimum cost; standing DR network and orchestration services add baseline spend but reduce operational risk during regional outages."
+    },
+    "validation": "Plan is coherent for East US primary to West US DR with VM replication prerequisites, target networking, and automated DNS failover/failback workflow hooks.",
+    "architecturePrinciples": [
+      "Resiliency-first",
+      "Automated recovery",
+      "Least-privilege access",
+      "Operational simplicity"
+    ],
+    "references": [
+      {
+        "title": "Business continuity and disaster recovery in Azure",
+        "url": "https://learn.microsoft.com/azure/architecture/framework/resiliency/overview"
+      },
+      {
+        "title": "Azure Well-Architected Framework - Reliability",
+        "url": "https://learn.microsoft.com/azure/well-architected/reliability/"
+      }
+    ]
+  }
+}

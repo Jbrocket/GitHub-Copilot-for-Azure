@@ -1,0 +1,713 @@
+{
+  "meta": {
+    "planId": "plan-3tier-vmss-sqlmi",
+    "generatedAt": "2026-03-11T12:56:48.884Z",
+    "version": "0.1-draft",
+    "status": "draft"
+  },
+  "inputs": {
+    "userGoal": "Configure an autoscaled VMSS-based presentation tier, application servers in a separate subnet, and an encrypted SQL Managed Instance as the backend database."
+  },
+  "plan": {
+    "architecturePrinciples": [
+      "Three-tier isolation via dedicated subnets",
+      "Autoscaling for elastic presentation tier",
+      "Encryption at rest via TDE with customer-managed keys",
+      "Zone-redundant where available",
+      "Least-privilege access with managed identity",
+      "Standard SKU networking (Basic retiring Sep 2025)"
+    ],
+    "resources": [
+      {
+        "name": "vnet-threetier-prod-eastus-001",
+        "type": "Microsoft.Network/virtualNetworks",
+        "location": "eastus",
+        "sku": "N/A",
+        "properties": {
+          "addressSpace": {
+            "addressPrefixes": ["10.0.0.0/16"]
+          }
+        },
+        "reasoning": {
+          "whyChosen": "Single VNet isolates all three tiers via subnets while allowing internal connectivity. Aligns with WAF Reliability and Security pillars.",
+          "alternativesConsidered": ["Hub-spoke with peering"],
+          "tradeoffs": "Single VNet simplifies routing but limits blast-radius isolation vs hub-spoke."
+        },
+        "dependencies": [],
+        "dependencyReasoning": "Root networking resource; no dependencies.",
+        "references": [
+          { "title": "Virtual Network overview", "url": "https://learn.microsoft.com/azure/virtual-network/virtual-networks-overview" },
+          { "title": "VNet planning", "url": "https://learn.microsoft.com/azure/virtual-network/virtual-network-vnet-plan-design-arm" }
+        ]
+      },
+      {
+        "name": "nsg-web-prod-001",
+        "type": "Microsoft.Network/networkSecurityGroups",
+        "location": "eastus",
+        "sku": "N/A",
+        "properties": {
+          "securityRules": [
+            {
+              "name": "AllowHTTPSInbound",
+              "properties": {
+                "priority": 100,
+                "direction": "Inbound",
+                "access": "Allow",
+                "protocol": "Tcp",
+                "sourceAddressPrefix": "Internet",
+                "destinationPortRange": "443",
+                "sourcePortRange": "*",
+                "destinationAddressPrefix": "*"
+              }
+            },
+            {
+              "name": "AllowHTTPInbound",
+              "properties": {
+                "priority": 110,
+                "direction": "Inbound",
+                "access": "Allow",
+                "protocol": "Tcp",
+                "sourceAddressPrefix": "Internet",
+                "destinationPortRange": "80",
+                "sourcePortRange": "*",
+                "destinationAddressPrefix": "*"
+              }
+            },
+            {
+              "name": "AllowAzureLoadBalancer",
+              "properties": {
+                "priority": 120,
+                "direction": "Inbound",
+                "access": "Allow",
+                "protocol": "*",
+                "sourceAddressPrefix": "AzureLoadBalancer",
+                "destinationPortRange": "*",
+                "sourcePortRange": "*",
+                "destinationAddressPrefix": "*"
+              }
+            }
+          ]
+        },
+        "reasoning": {
+          "whyChosen": "Required for Standard Load Balancer (secure by default). Restricts presentation tier to HTTP/HTTPS traffic only.",
+          "alternativesConsidered": ["Azure Firewall for centralized filtering"],
+          "tradeoffs": "NSG per-subnet is simpler and lower cost; Azure Firewall adds L7 inspection but is more expensive."
+        },
+        "dependencies": [],
+        "dependencyReasoning": "No resource dependencies; will be attached to the web subnet.",
+        "references": [
+          { "title": "NSG overview", "url": "https://learn.microsoft.com/azure/virtual-network/network-security-groups-overview" }
+        ]
+      },
+      {
+        "name": "nsg-app-prod-001",
+        "type": "Microsoft.Network/networkSecurityGroups",
+        "location": "eastus",
+        "sku": "N/A",
+        "properties": {
+          "securityRules": [
+            {
+              "name": "AllowWebSubnetInbound",
+              "properties": {
+                "priority": 100,
+                "direction": "Inbound",
+                "access": "Allow",
+                "protocol": "Tcp",
+                "sourceAddressPrefix": "10.0.1.0/24",
+                "destinationPortRange": "8080",
+                "sourcePortRange": "*",
+                "destinationAddressPrefix": "*"
+              }
+            },
+            {
+              "name": "DenyInternetInbound",
+              "properties": {
+                "priority": 4000,
+                "direction": "Inbound",
+                "access": "Deny",
+                "protocol": "*",
+                "sourceAddressPrefix": "Internet",
+                "destinationPortRange": "*",
+                "sourcePortRange": "*",
+                "destinationAddressPrefix": "*"
+              }
+            }
+          ]
+        },
+        "reasoning": {
+          "whyChosen": "Restricts app tier to accept traffic only from the web subnet. Blocks direct internet access for defense-in-depth.",
+          "alternativesConsidered": ["Shared NSG with web tier"],
+          "tradeoffs": "Separate NSGs increase management overhead but provide stronger segmentation."
+        },
+        "dependencies": [],
+        "dependencyReasoning": "No resource dependencies; will be attached to the app subnet.",
+        "references": [
+          { "title": "NSG overview", "url": "https://learn.microsoft.com/azure/virtual-network/network-security-groups-overview" }
+        ]
+      },
+      {
+        "name": "nsg-sqlmi-prod-001",
+        "type": "Microsoft.Network/networkSecurityGroups",
+        "location": "eastus",
+        "sku": "N/A",
+        "properties": {
+          "securityRules": [
+            {
+              "name": "AllowAppSubnetSQLInbound",
+              "properties": {
+                "priority": 100,
+                "direction": "Inbound",
+                "access": "Allow",
+                "protocol": "Tcp",
+                "sourceAddressPrefix": "10.0.2.0/24",
+                "destinationPortRange": "1433",
+                "sourcePortRange": "*",
+                "destinationAddressPrefix": "*"
+              }
+            }
+          ]
+        },
+        "reasoning": {
+          "whyChosen": "SQL MI requires an NSG on its delegated subnet. Rule limits SQL traffic to the app tier only.",
+          "alternativesConsidered": ["Default NSG with no custom rules"],
+          "tradeoffs": "SQL MI service-aided configuration will add mandatory rules automatically; custom rules supplement those."
+        },
+        "dependencies": [],
+        "dependencyReasoning": "No resource dependencies; will be attached to the SQL MI subnet.",
+        "references": [
+          { "title": "SQL MI connectivity architecture", "url": "https://learn.microsoft.com/azure/azure-sql/managed-instance/connectivity-architecture-overview" }
+        ]
+      },
+      {
+        "name": "rt-sqlmi-prod-001",
+        "type": "Microsoft.Network/routeTables",
+        "location": "eastus",
+        "sku": "N/A",
+        "properties": {
+          "disableBgpRoutePropagation": false
+        },
+        "reasoning": {
+          "whyChosen": "SQL Managed Instance requires a route table on its subnet for service-aided configuration. Routes are managed automatically by the service.",
+          "alternativesConsidered": ["Custom UDR with forced tunneling"],
+          "tradeoffs": "Letting SQL MI manage its own routes simplifies operations; custom routes can be added for on-prem connectivity."
+        },
+        "dependencies": [],
+        "dependencyReasoning": "No dependencies; standalone route table resource.",
+        "references": [
+          { "title": "SQL MI subnet requirements", "url": "https://learn.microsoft.com/azure/azure-sql/managed-instance/connectivity-architecture-overview#network-requirements" }
+        ]
+      },
+      {
+        "name": "snet-web-001",
+        "type": "Microsoft.Network/virtualNetworks/subnets",
+        "location": "eastus",
+        "sku": "N/A",
+        "properties": {
+          "addressPrefix": "10.0.1.0/24",
+          "networkSecurityGroup": { "id": "nsg-web-prod-001" }
+        },
+        "reasoning": {
+          "whyChosen": "Dedicated subnet for the presentation tier VMSS. /24 provides 251 usable IPs for autoscaling instances.",
+          "alternativesConsidered": ["/25 subnet"],
+          "tradeoffs": "/24 gives headroom for peak autoscaling; /25 saves address space."
+        },
+        "dependencies": ["vnet-threetier-prod-eastus-001", "nsg-web-prod-001"],
+        "dependencyReasoning": "Subnet is a child of the VNet and references the web NSG.",
+        "references": [
+          { "title": "Subnet management", "url": "https://learn.microsoft.com/azure/virtual-network/virtual-network-manage-subnet" }
+        ]
+      },
+      {
+        "name": "snet-app-001",
+        "type": "Microsoft.Network/virtualNetworks/subnets",
+        "location": "eastus",
+        "sku": "N/A",
+        "properties": {
+          "addressPrefix": "10.0.2.0/24",
+          "networkSecurityGroup": { "id": "nsg-app-prod-001" }
+        },
+        "reasoning": {
+          "whyChosen": "Dedicated subnet for the application tier VMs. Isolates app servers from web and database tiers.",
+          "alternativesConsidered": ["Shared subnet with web tier"],
+          "tradeoffs": "Separate subnet enables per-tier NSG rules at the cost of address space."
+        },
+        "dependencies": ["vnet-threetier-prod-eastus-001", "nsg-app-prod-001"],
+        "dependencyReasoning": "Subnet is a child of the VNet and references the app NSG.",
+        "references": [
+          { "title": "Subnet management", "url": "https://learn.microsoft.com/azure/virtual-network/virtual-network-manage-subnet" }
+        ]
+      },
+      {
+        "name": "snet-sqlmi-001",
+        "type": "Microsoft.Network/virtualNetworks/subnets",
+        "location": "eastus",
+        "sku": "N/A",
+        "properties": {
+          "addressPrefix": "10.0.3.0/24",
+          "networkSecurityGroup": { "id": "nsg-sqlmi-prod-001" },
+          "routeTable": { "id": "rt-sqlmi-prod-001" },
+          "delegations": [
+            {
+              "name": "sqlmi-delegation",
+              "properties": {
+                "serviceName": "Microsoft.Sql/managedInstances"
+              }
+            }
+          ]
+        },
+        "reasoning": {
+          "whyChosen": "SQL MI requires a dedicated, delegated subnet with NSG and route table. /24 accommodates multiple instances if needed.",
+          "alternativesConsidered": ["/27 subnet for single instance"],
+          "tradeoffs": "/24 over-provisions for a single instance but supports future growth without subnet migration."
+        },
+        "dependencies": ["vnet-threetier-prod-eastus-001", "nsg-sqlmi-prod-001", "rt-sqlmi-prod-001"],
+        "dependencyReasoning": "Subnet is a child of the VNet and references the SQL MI NSG and route table.",
+        "references": [
+          { "title": "SQL MI subnet requirements", "url": "https://learn.microsoft.com/azure/azure-sql/managed-instance/connectivity-architecture-overview#network-requirements" }
+        ]
+      },
+      {
+        "name": "pip-lbe-web-prod-eastus-001",
+        "type": "Microsoft.Network/publicIPAddresses",
+        "location": "eastus",
+        "sku": "Standard",
+        "properties": {
+          "publicIPAllocationMethod": "Static",
+          "publicIPAddressVersion": "IPv4",
+          "zones": ["1", "2", "3"]
+        },
+        "reasoning": {
+          "whyChosen": "Standard SKU public IP is required by the Standard Load Balancer. Zone-redundant for high availability.",
+          "alternativesConsidered": ["Basic SKU public IP"],
+          "tradeoffs": "Standard is required for zone-redundancy. Basic SKU is retiring Sep 2025."
+        },
+        "dependencies": [],
+        "dependencyReasoning": "No resource dependencies.",
+        "references": [
+          { "title": "Public IP overview", "url": "https://learn.microsoft.com/azure/virtual-network/ip-services/public-ip-addresses" }
+        ]
+      },
+      {
+        "name": "lbe-web-prod-001",
+        "type": "Microsoft.Network/loadBalancers",
+        "location": "eastus",
+        "sku": "Standard",
+        "properties": {
+          "frontendIPConfigurations": [
+            {
+              "name": "frontend-web",
+              "properties": {
+                "publicIPAddress": { "id": "pip-lbe-web-prod-eastus-001" }
+              }
+            }
+          ],
+          "backendAddressPools": [
+            { "name": "vmss-web-backend" }
+          ],
+          "loadBalancingRules": [
+            {
+              "name": "http-rule",
+              "properties": {
+                "protocol": "Tcp",
+                "frontendPort": 80,
+                "backendPort": 80,
+                "enableFloatingIP": false,
+                "idleTimeoutInMinutes": 4
+              }
+            },
+            {
+              "name": "https-rule",
+              "properties": {
+                "protocol": "Tcp",
+                "frontendPort": 443,
+                "backendPort": 443,
+                "enableFloatingIP": false,
+                "idleTimeoutInMinutes": 4
+              }
+            }
+          ],
+          "probes": [
+            {
+              "name": "health-http",
+              "properties": {
+                "protocol": "Tcp",
+                "port": 80,
+                "intervalInSeconds": 15
+              }
+            }
+          ]
+        },
+        "reasoning": {
+          "whyChosen": "External Standard Load Balancer distributes internet traffic to the VMSS presentation tier. Zone-redundant by default.",
+          "alternativesConsidered": ["Application Gateway for L7 routing", "Azure Front Door"],
+          "tradeoffs": "LB is L4 only — no WAF, SSL offload, or URL routing. Application Gateway adds L7 features at higher cost. Front Door adds global load balancing."
+        },
+        "dependencies": ["pip-lbe-web-prod-eastus-001"],
+        "dependencyReasoning": "Load Balancer frontend references the public IP. Standard LB requires Standard public IP (SKU match).",
+        "references": [
+          { "title": "Load Balancer overview", "url": "https://learn.microsoft.com/azure/load-balancer/load-balancer-overview" },
+          { "title": "Standard Load Balancer", "url": "https://learn.microsoft.com/azure/load-balancer/load-balancer-standard-overview" }
+        ]
+      },
+      {
+        "name": "vmss-web-prod-001",
+        "type": "Microsoft.Compute/virtualMachineScaleSets",
+        "location": "eastus",
+        "sku": "Standard_D2s_v5",
+        "properties": {
+          "orchestrationMode": "Flexible",
+          "sku": {
+            "name": "Standard_D2s_v5",
+            "tier": "Standard",
+            "capacity": 2
+          },
+          "upgradePolicy": {
+            "mode": "Rolling"
+          },
+          "virtualMachineProfile": {
+            "osProfile": {
+              "linuxConfiguration": {
+                "disablePasswordAuthentication": true
+              }
+            },
+            "storageProfile": {
+              "imageReference": {
+                "publisher": "Canonical",
+                "offer": "ubuntu-24_04-lts",
+                "sku": "server",
+                "version": "latest"
+              },
+              "osDisk": {
+                "createOption": "FromImage",
+                "managedDisk": {
+                  "storageAccountType": "Premium_LRS"
+                }
+              }
+            },
+            "networkProfile": {
+              "networkInterfaceConfigurations": [
+                {
+                  "name": "nic-vmss-web",
+                  "properties": {
+                    "primary": true,
+                    "ipConfigurations": [
+                      {
+                        "name": "ipconfig-web",
+                        "properties": {
+                          "subnet": { "id": "snet-web-001" },
+                          "loadBalancerBackendAddressPools": [
+                            { "id": "lbe-web-prod-001/vmss-web-backend" }
+                          ]
+                        }
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          },
+          "zones": ["1", "2", "3"]
+        },
+        "reasoning": {
+          "whyChosen": "VMSS with Flexible orchestration provides autoscaling for the presentation tier. Standard_D2s_v5 offers balanced compute/memory for web workloads. Zone distribution across 3 zones for HA.",
+          "alternativesConsidered": ["Standard_B2s (burstable, lower cost)", "App Service for managed hosting"],
+          "tradeoffs": "D2s_v5 gives consistent performance vs burstable B-series. VMSS gives OS-level control vs PaaS simplicity of App Service."
+        },
+        "dependencies": ["snet-web-001", "lbe-web-prod-001"],
+        "dependencyReasoning": "VMSS NICs reference the web subnet and the load balancer backend pool.",
+        "references": [
+          { "title": "VM Scale Sets overview", "url": "https://learn.microsoft.com/azure/virtual-machine-scale-sets/overview" },
+          { "title": "Bicep VMSS reference", "url": "https://learn.microsoft.com/azure/templates/microsoft.compute/virtualmachinescalesets" }
+        ]
+      },
+      {
+        "name": "autoscale-vmss-web-prod-001",
+        "type": "Microsoft.Insights/autoscaleSettings",
+        "location": "eastus",
+        "sku": "N/A",
+        "properties": {
+          "targetResourceUri": "vmss-web-prod-001",
+          "enabled": true,
+          "profiles": [
+            {
+              "name": "auto-scale-profile",
+              "capacity": {
+                "minimum": "2",
+                "maximum": "10",
+                "default": "2"
+              },
+              "rules": [
+                {
+                  "metricTrigger": {
+                    "metricName": "Percentage CPU",
+                    "operator": "GreaterThan",
+                    "threshold": 70,
+                    "timeAggregation": "Average",
+                    "timeWindow": "PT5M",
+                    "timeGrain": "PT1M"
+                  },
+                  "scaleAction": {
+                    "direction": "Increase",
+                    "type": "ChangeCount",
+                    "value": "1",
+                    "cooldown": "PT5M"
+                  }
+                },
+                {
+                  "metricTrigger": {
+                    "metricName": "Percentage CPU",
+                    "operator": "LessThan",
+                    "threshold": 30,
+                    "timeAggregation": "Average",
+                    "timeWindow": "PT5M",
+                    "timeGrain": "PT1M"
+                  },
+                  "scaleAction": {
+                    "direction": "Decrease",
+                    "type": "ChangeCount",
+                    "value": "1",
+                    "cooldown": "PT5M"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "reasoning": {
+          "whyChosen": "CPU-based autoscaling for the VMSS handles traffic spikes in the presentation tier. Scale range 2–10 provides baseline redundancy and burst capacity.",
+          "alternativesConsidered": ["Schedule-based autoscale", "Custom metric autoscale"],
+          "tradeoffs": "CPU-based is simple but may lag behind request-based spikes. Custom metrics offer finer control."
+        },
+        "dependencies": ["vmss-web-prod-001"],
+        "dependencyReasoning": "Autoscale setting targets the VMSS resource.",
+        "references": [
+          { "title": "Autoscale overview", "url": "https://learn.microsoft.com/azure/azure-monitor/autoscale/autoscale-overview" }
+        ]
+      },
+      {
+        "name": "vmss-app-prod-001",
+        "type": "Microsoft.Compute/virtualMachineScaleSets",
+        "location": "eastus",
+        "sku": "Standard_D4s_v5",
+        "properties": {
+          "orchestrationMode": "Flexible",
+          "sku": {
+            "name": "Standard_D4s_v5",
+            "tier": "Standard",
+            "capacity": 2
+          },
+          "upgradePolicy": {
+            "mode": "Rolling"
+          },
+          "virtualMachineProfile": {
+            "osProfile": {
+              "linuxConfiguration": {
+                "disablePasswordAuthentication": true
+              }
+            },
+            "storageProfile": {
+              "imageReference": {
+                "publisher": "Canonical",
+                "offer": "ubuntu-24_04-lts",
+                "sku": "server",
+                "version": "latest"
+              },
+              "osDisk": {
+                "createOption": "FromImage",
+                "managedDisk": {
+                  "storageAccountType": "Premium_LRS"
+                }
+              }
+            },
+            "networkProfile": {
+              "networkInterfaceConfigurations": [
+                {
+                  "name": "nic-vmss-app",
+                  "properties": {
+                    "primary": true,
+                    "ipConfigurations": [
+                      {
+                        "name": "ipconfig-app",
+                        "properties": {
+                          "subnet": { "id": "snet-app-001" }
+                        }
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          },
+          "zones": ["1", "2", "3"],
+          "identity": {
+            "type": "SystemAssigned"
+          }
+        },
+        "reasoning": {
+          "whyChosen": "Application tier uses a VMSS in a separate subnet for isolation. Standard_D4s_v5 (4 vCores, 16 GB) provides adequate compute for business logic. System-assigned managed identity for secure SQL MI access.",
+          "alternativesConsidered": ["Standalone VMs with availability set", "Azure App Service"],
+          "tradeoffs": "VMSS offers autoscaling and zone distribution. Standalone VMs are simpler but lack elastic scaling. App Service is PaaS but limits OS-level control."
+        },
+        "dependencies": ["snet-app-001"],
+        "dependencyReasoning": "App VMSS NICs reference the app subnet.",
+        "references": [
+          { "title": "VM Scale Sets overview", "url": "https://learn.microsoft.com/azure/virtual-machine-scale-sets/overview" }
+        ]
+      },
+      {
+        "name": "lbi-app-prod-001",
+        "type": "Microsoft.Network/loadBalancers",
+        "location": "eastus",
+        "sku": "Standard",
+        "properties": {
+          "frontendIPConfigurations": [
+            {
+              "name": "frontend-app",
+              "properties": {
+                "subnet": { "id": "snet-app-001" },
+                "privateIPAllocationMethod": "Dynamic"
+              }
+            }
+          ],
+          "backendAddressPools": [
+            { "name": "vmss-app-backend" }
+          ],
+          "loadBalancingRules": [
+            {
+              "name": "app-rule",
+              "properties": {
+                "protocol": "Tcp",
+                "frontendPort": 8080,
+                "backendPort": 8080,
+                "enableFloatingIP": false,
+                "idleTimeoutInMinutes": 4
+              }
+            }
+          ],
+          "probes": [
+            {
+              "name": "health-app",
+              "properties": {
+                "protocol": "Tcp",
+                "port": 8080,
+                "intervalInSeconds": 15
+              }
+            }
+          ]
+        },
+        "reasoning": {
+          "whyChosen": "Internal Standard LB distributes traffic from the web tier to the application servers. No public exposure.",
+          "alternativesConsidered": ["Direct VM-to-VM connectivity"],
+          "tradeoffs": "Internal LB adds HA and health probing at minimal cost vs. direct connections."
+        },
+        "dependencies": ["snet-app-001"],
+        "dependencyReasoning": "Internal LB frontend references the app subnet.",
+        "references": [
+          { "title": "Internal Load Balancer", "url": "https://learn.microsoft.com/azure/load-balancer/load-balancer-overview" }
+        ]
+      },
+      {
+        "name": "id-sqlmi-prod-001",
+        "type": "Microsoft.ManagedIdentity/userAssignedIdentities",
+        "location": "eastus",
+        "sku": "N/A",
+        "properties": {},
+        "reasoning": {
+          "whyChosen": "User-assigned managed identity allows SQL MI to access Key Vault for TDE customer-managed key (CMK) encryption. Required for CMK-based TDE.",
+          "alternativesConsidered": ["System-assigned managed identity"],
+          "tradeoffs": "User-assigned identity can be shared across resources and pre-created before SQL MI, enabling proper Key Vault access policy setup."
+        },
+        "dependencies": [],
+        "dependencyReasoning": "No dependencies; standalone identity resource.",
+        "references": [
+          { "title": "Managed identities overview", "url": "https://learn.microsoft.com/azure/active-directory/managed-identities-azure-resources/overview" }
+        ]
+      },
+      {
+        "name": "kv-threetier-prod-001",
+        "type": "Microsoft.KeyVault/vaults",
+        "location": "eastus",
+        "sku": "premium",
+        "properties": {
+          "sku": {
+            "name": "premium",
+            "family": "A"
+          },
+          "tenantId": "[subscription().tenantId]",
+          "enableSoftDelete": true,
+          "enablePurgeProtection": true,
+          "softDeleteRetentionInDays": 90,
+          "enableRbacAuthorization": true,
+          "enabledForDiskEncryption": false,
+          "enabledForDeployment": false,
+          "enabledForTemplateDeployment": false
+        },
+        "reasoning": {
+          "whyChosen": "Premium SKU Key Vault provides HSM-backed keys for SQL MI TDE customer-managed encryption. Purge protection is mandatory for TDE CMK. RBAC authorization is the modern best practice.",
+          "alternativesConsidered": ["Standard SKU Key Vault"],
+          "tradeoffs": "Premium adds cost for HSM-backed keys but provides stronger key protection. Standard suffices for software-protected keys."
+        },
+        "dependencies": [],
+        "dependencyReasoning": "No resource dependencies.",
+        "references": [
+          { "title": "Key Vault overview", "url": "https://learn.microsoft.com/azure/key-vault/general/overview" },
+          { "title": "SQL TDE with Key Vault", "url": "https://learn.microsoft.com/azure/azure-sql/database/transparent-data-encryption-byok-overview" }
+        ]
+      },
+      {
+        "name": "sqlmi-prod-001",
+        "type": "Microsoft.Sql/managedInstances",
+        "location": "eastus",
+        "sku": "GP_Gen5",
+        "properties": {
+          "sku": {
+            "name": "GP_Gen5",
+            "tier": "GeneralPurpose",
+            "family": "Gen5",
+            "capacity": 8
+          },
+          "administratorLogin": "sqladmin",
+          "subnetId": "snet-sqlmi-001",
+          "licenseType": "LicenseIncluded",
+          "vCores": 8,
+          "storageSizeInGB": 256,
+          "zoneRedundant": false,
+          "minimalTlsVersion": "1.2",
+          "publicDataEndpointEnabled": false,
+          "timezoneId": "UTC",
+          "identity": {
+            "type": "UserAssigned",
+            "userAssignedIdentities": {
+              "id-sqlmi-prod-001": {}
+            }
+          },
+          "keyId": "[Key Vault key URI — kv-threetier-prod-001/keys/sqlmi-tde-key]",
+          "primaryUserAssignedIdentityId": "id-sqlmi-prod-001"
+        },
+        "reasoning": {
+          "whyChosen": "SQL Managed Instance provides near-100% SQL Server compatibility in a PaaS model. General Purpose tier with Gen5 hardware and 8 vCores is a balanced starting point. TDE with CMK from Key Vault satisfies the encryption requirement. Public endpoint disabled for security.",
+          "alternativesConsidered": ["Azure SQL Database (logical server + database)", "SQL Server on Azure VM", "Business Critical tier"],
+          "tradeoffs": "General Purpose is cost-effective but lacks built-in HA read replicas (Business Critical adds that). SQL MI deployment takes 4–6 hours for the first instance in a subnet."
+        },
+        "dependencies": ["snet-sqlmi-001", "kv-threetier-prod-001", "id-sqlmi-prod-001"],
+        "dependencyReasoning": "SQL MI deploys into the delegated subnet, uses the managed identity to access Key Vault for TDE CMK.",
+        "references": [
+          { "title": "SQL MI overview", "url": "https://learn.microsoft.com/azure/azure-sql/managed-instance/sql-managed-instance-paas-overview" },
+          { "title": "SQL MI Bicep quickstart", "url": "https://learn.microsoft.com/azure/azure-sql/managed-instance/create-bicep-quickstart" },
+          { "title": "SQL MI connectivity architecture", "url": "https://learn.microsoft.com/azure/azure-sql/managed-instance/connectivity-architecture-overview" },
+          { "title": "TDE with CMK for SQL MI", "url": "https://learn.microsoft.com/azure/azure-sql/database/transparent-data-encryption-byok-overview" }
+        ]
+      }
+    ],
+    "overallReasoning": {
+      "summary": "Classic three-tier architecture with network isolation. The presentation tier uses an autoscaled VMSS behind an external Standard Load Balancer. The application tier uses a separate VMSS behind an internal Standard Load Balancer in its own subnet. The data tier uses Azure SQL Managed Instance with TDE customer-managed key encryption via Key Vault, deployed into a dedicated delegated subnet. NSGs enforce traffic segmentation between tiers. All resources are in East US with zone distribution where supported.",
+      "tradeoffs": "SQL MI General Purpose tier lacks built-in read replicas (available in Business Critical). Zone redundancy for SQL MI GP is not available in all regions. The VMSS presentation tier uses L4 load balancing — consider Application Gateway or Front Door if L7 features (WAF, SSL offload, URL routing) are needed. Initial SQL MI provisioning takes 4–6 hours."
+    },
+    "validation": "All resources deploy into the same VNet (10.0.0.0/16) with non-overlapping subnets. Standard SKU is used consistently for public IPs and load balancers. SQL MI subnet is properly delegated to Microsoft.Sql/managedInstances with the required NSG and route table. Key Vault has purge protection enabled as required for TDE CMK. VMSS uses Flexible orchestration mode (modern default). No subnet delegation conflicts exist.",
+    "references": [
+      { "title": "N-tier architecture on VMs", "url": "https://learn.microsoft.com/azure/architecture/reference-architectures/n-tier/n-tier-sql-server" },
+      { "title": "Azure Well-Architected Framework", "url": "https://learn.microsoft.com/azure/well-architected/" },
+      { "title": "Cloud Adoption Framework naming conventions", "url": "https://learn.microsoft.com/azure/cloud-adoption-framework/ready/azure-best-practices/resource-naming" }
+    ]
+  }
+}

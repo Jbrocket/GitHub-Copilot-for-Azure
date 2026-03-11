@@ -1,0 +1,111 @@
+{
+  "meta": {
+    "planId": "plan-ecommerce-microservices-001",
+    "generatedAt": "2026-03-11T13:20:00Z",
+    "version": "1.0",
+    "status": "draft"
+  },
+  "inputs": {
+    "userGoal": "Deploy a microservices-based e-commerce backend with independent catalog, order, and payment services, use AKS with Helm for deployments, and implement service mesh for traffic control."
+  },
+  "plan": {
+    "resources": [
+      {
+        "name": "rg-ecommerce-dev",
+        "type": "Microsoft.Resources/resourceGroups",
+        "location": "eastus",
+        "sku": "Standard",
+        "reasoning": {
+          "whyChosen": "Required to group all related resources for lifecycle management.",
+          "alternativesConsidered": ["Existing Resource Group"],
+          "tradeoffs": "None"
+        },
+        "dependencies": [],
+        "references": []
+      },
+      {
+        "name": "acrecommercedev",
+        "type": "Microsoft.ContainerRegistry/registries",
+        "location": "eastus",
+        "sku": "Standard",
+        "properties": {
+          "adminUserEnabled": true
+        },
+        "reasoning": {
+          "whyChosen": "Required to store Docker images for the catalog, order, and payment microservices.",
+          "alternativesConsidered": ["Docker Hub", "GitHub Container Registry"],
+          "tradeoffs": "Standard SKU provides sufficient performance for dev/test but lacks Geo-Replication of Premium."
+        },
+        "dependencies": ["rg-ecommerce-dev"],
+        "references": []
+      },
+      {
+        "name": "log-ecommerce-dev",
+        "type": "Microsoft.OperationalInsights/workspaces",
+        "location": "eastus",
+        "sku": "PerGB2018",
+        "reasoning": {
+          "whyChosen": "Centralized logging and monitoring for the AKS cluster and container workloads.",
+          "alternativesConsidered": ["None"],
+          "tradeoffs": "Cost scales with data ingestion volume."
+        },
+        "dependencies": ["rg-ecommerce-dev"],
+        "references": []
+      },
+      {
+        "name": "aks-ecommerce-dev",
+        "type": "Microsoft.ContainerService/managedClusters",
+        "location": "eastus",
+        "sku": "Standard",
+        "properties": {
+          "kubernetesVersion": "1.29",
+          "dnsPrefix": "aks-ecommerce-dev",
+          "agentPoolProfiles": [
+            {
+              "name": "agentpool",
+              "count": 3,
+              "vmSize": "Standard_DS2_v2",
+              "osType": "Linux",
+              "mode": "System"
+            }
+          ],
+          "addonProfiles": {
+            "omsagent": {
+              "enabled": true,
+              "config": {
+                "logAnalyticsWorkspaceResourceID": "[resourceId('Microsoft.OperationalInsights/workspaces', 'log-ecommerce-dev')]"
+              }
+            }
+          },
+          "serviceMeshProfile": {
+             "mode": "Istio",
+             "istio": {
+                "components": {
+                   "ingressGateways": [
+                      {
+                         "enabled": true,
+                         "mode": "External"
+                      }
+                   ]
+                }
+             }
+          }
+        },
+        "reasoning": {
+          "whyChosen": "Managed Kubernetes service is essential for orchestrating microservices. Istio service mesh handles traffic control as requested.",
+          "alternativesConsidered": ["Azure Container Apps", "Azure Service Fabric"],
+          "tradeoffs": "Higher operational overhead than Container Apps but offers full Kubernetes ecosystem compatibility (Helm)."
+        },
+        "dependencies": ["rg-ecommerce-dev", "acrecommercedev", "log-ecommerce-dev"],
+        "references": []
+      }
+    ],
+    "overallReasoning": {
+      "summary": "This infrastructure plan establishes a robust foundation for a microservices architecture using Azure Kubernetes Service (AKS). It includes a container registry for image management, a log analytics workspace for observability, and an Istio-based service mesh for traffic control, satisfying all requirements.",
+      "tradeoffs": "Using AKS introduces complexity in cluster management compared to PaaS solutions, but provides necessary flexibility for Helm deployments and service mesh integration."
+    },
+    "validation": "The plan includes all requested components: Compute (AKS), Storage (ACR), Monitoring (Log Analytics), and Networking (Service Mesh configuration). Resource dependencies are correctly ordered.",
+    "architecturePrinciples": ["Microservices", "Containerization", "Infrastructure as Code", "Observability", "Service Mesh"],
+    "references": []
+  }
+}

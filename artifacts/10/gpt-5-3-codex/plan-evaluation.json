@@ -1,0 +1,34 @@
+{
+  "overallScore": 0.76,
+  "dimensions": {
+    "goalAlignment": 0.85,
+    "wafConformance": 0.6,
+    "dependencyCompleteness": 0.85,
+    "deploymentViability": 0.7
+  },
+  "risks": [
+    "No private endpoints configured for any resource; IoT Hub has publicNetworkAccess set to Enabled, increasing attack surface",
+    "No managed identity configuration for cross-service authentication (e.g., IoT Hub to ACR, Logic Apps to Communication Services)",
+    "No monitoring or diagnostics resources included (Log Analytics, Application Insights); no diagnostic settings on IoT Hub or Cosmos DB",
+    "No Key Vault resource for secrets management; credentials for ACR-to-IoT-Hub integration are not addressed",
+    "No explicit IoT Hub message route to Cosmos DB or trigger mechanism from IoT Hub to Logic Apps; only the built-in fallback route is configured",
+    "Cosmos DB serverless with single-region deployment has no failover or backup configuration specified",
+    "Logic Apps subtype is 'Consumption' but SKU is set to 'Standard', which is inconsistent and may cause template confusion",
+    "ACR Basic SKU lacks geo-replication and content trust features needed for production IoT Edge deployments",
+    "Communication Services Free SKU may have limited SMS throughput and phone number provisioning constraints"
+  ],
+  "correctionsRecommended": [
+    "Change communicationSmsService location from 'eastus' to 'Global' and set dataLocation to 'UnitedStates'; ACS is a global resource and will fail deployment with a regional location",
+    "Add managed identity resources and RBAC role assignments for IoT Hub to pull images from ACR (AcrPull role) instead of relying on admin credentials",
+    "Add a Log Analytics workspace and configure diagnostic settings on IoT Hub and Cosmos DB for operational visibility",
+    "Add an IoT Hub custom route or Event Grid subscription to connect device messages to Cosmos DB and to trigger the Logic App for SMS alerts",
+    "Add a dependency from logicAppSmsAlerts to communicationSmsService to capture the implicit runtime integration requirement",
+    "Consider adding a Key Vault resource for storing connection strings and secrets used across services",
+    "Correct the logicAppSmsAlerts SKU from 'Standard' to match the Consumption subtype, or remove the SKU field since Consumption workflows do not use a top-level SKU property",
+    "Consider upgrading ACR to Standard SKU for production workloads to support webhooks and higher storage limits"
+  ],
+  "hardDependencies": [
+    "communicationSmsService.location must be 'Global' (not 'eastus'); Azure Communication Services is a global-only resource and ARM deployment will fail with a regional location value"
+  ],
+  "deployable": 0
+}

@@ -1,0 +1,545 @@
+{
+  "meta": {
+    "planId": "dr-site-recovery-plan-1",
+    "generatedAt": "2026-03-11T13:11:03.428Z",
+    "version": "0.1-draft",
+    "status": "draft"
+  },
+  "inputs": {
+    "userGoal": "Configure a site recovery plan for disaster failover from East to West Azure region, replicate major VM workloads, and automate DNS failbacks"
+  },
+  "plan": {
+    "resources": [
+      {
+        "name": "rg-dr-primary-eastus2",
+        "type": "Microsoft.Resources/resourceGroups",
+        "subtype": "Resource Group",
+        "location": "eastus2",
+        "sku": "N/A",
+        "properties": {
+          "location": "eastus2"
+        },
+        "reasoning": {
+          "whyChosen": "Primary resource group to contain production workloads in the East US 2 region. Provides logical grouping and management boundary for primary site resources.",
+          "alternativesConsidered": ["East US", "Central US"],
+          "tradeoffs": "East US 2 provides better regional pair coverage with West US 2 for disaster recovery scenarios."
+        },
+        "dependencies": [],
+        "references": [
+          {
+            "title": "Azure Resource Groups",
+            "url": "https://learn.microsoft.com/azure/azure-resource-manager/management/manage-resource-groups-portal"
+          }
+        ]
+      },
+      {
+        "name": "rg-dr-secondary-westus2",
+        "type": "Microsoft.Resources/resourceGroups",
+        "subtype": "Resource Group",
+        "location": "westus2",
+        "sku": "N/A",
+        "properties": {
+          "location": "westus2"
+        },
+        "reasoning": {
+          "whyChosen": "Secondary resource group for disaster recovery target in West US 2 region. Forms a regional pair with East US 2 for optimal disaster recovery setup.",
+          "alternativesConsidered": ["West US", "West Central US"],
+          "tradeoffs": "West US 2 is the recommended paired region for East US 2, providing best recovery characteristics."
+        },
+        "dependencies": [],
+        "references": [
+          {
+            "title": "Azure paired regions",
+            "url": "https://learn.microsoft.com/azure/reliability/cross-region-replication-azure"
+          }
+        ]
+      },
+      {
+        "name": "rsv-primary-eastus2",
+        "type": "Microsoft.RecoveryServices/vaults",
+        "subtype": "Recovery Services Vault",
+        "location": "eastus2", 
+        "sku": "RS0",
+        "properties": {
+          "storageSettings": {
+            "storageModelType": "GeoRedundant",
+            "crossRegionRestore": "Enabled"
+          },
+          "softDeleteState": "Enabled",
+          "softDeleteFeatureState": "Enabled",
+          "immutableVault": "Enabled"
+        },
+        "reasoning": {
+          "whyChosen": "Recovery Services Vault in primary region to orchestrate Site Recovery replication and manage disaster recovery operations. Geo-redundant storage ensures vault metadata survives regional outages.",
+          "alternativesConsidered": ["Vault in secondary region", "Separate vault in third region"],
+          "tradeoffs": "Primary region vault enables easier management but may be impacted during source region outage. Geo-redundancy mitigates this risk."
+        },
+        "dependencies": ["rg-dr-primary-eastus2"],
+        "dependencyReasoning": "Must be deployed within the primary resource group for organizational consistency.",
+        "references": [
+          {
+            "title": "Recovery Services vault overview",
+            "url": "https://learn.microsoft.com/azure/backup/backup-azure-recovery-services-vault-overview"
+          },
+          {
+            "title": "Site Recovery vault considerations", 
+            "url": "https://learn.microsoft.com/azure/reliability/reliability-site-recovery#resilience-to-region-wide-failures"
+          }
+        ]
+      },
+      {
+        "name": "vnet-primary-eastus2",
+        "type": "Microsoft.Network/virtualNetworks",
+        "subtype": "Virtual Network",
+        "location": "eastus2",
+        "sku": "Standard",
+        "properties": {
+          "addressSpace": {
+            "addressPrefixes": ["10.1.0.0/16"]
+          },
+          "subnets": [
+            {
+              "name": "subnet-web",
+              "properties": {
+                "addressPrefix": "10.1.1.0/24"
+              }
+            },
+            {
+              "name": "subnet-app",
+              "properties": {
+                "addressPrefix": "10.1.2.0/24"
+              }
+            },
+            {
+              "name": "subnet-db",
+              "properties": {
+                "addressPrefix": "10.1.3.0/24"
+              }
+            }
+          ]
+        },
+        "reasoning": {
+          "whyChosen": "Primary virtual network to host production workloads across multiple tiers (web, application, database). Segmented subnets provide security isolation.",
+          "alternativesConsidered": ["Single subnet design", "Hub-spoke topology"],
+          "tradeoffs": "Multi-subnet design provides better security isolation but requires additional network planning."
+        },
+        "dependencies": ["rg-dr-primary-eastus2"],
+        "references": [
+          {
+            "title": "Virtual Network overview",
+            "url": "https://learn.microsoft.com/azure/virtual-network/virtual-networks-overview"
+          }
+        ]
+      },
+      {
+        "name": "vnet-secondary-westus2",
+        "type": "Microsoft.Network/virtualNetworks", 
+        "subtype": "Virtual Network",
+        "location": "westus2",
+        "sku": "Standard",
+        "properties": {
+          "addressSpace": {
+            "addressPrefixes": ["10.2.0.0/16"]
+          },
+          "subnets": [
+            {
+              "name": "subnet-web",
+              "properties": {
+                "addressPrefix": "10.2.1.0/24"
+              }
+            },
+            {
+              "name": "subnet-app", 
+              "properties": {
+                "addressPrefix": "10.2.2.0/24"
+              }
+            },
+            {
+              "name": "subnet-db",
+              "properties": {
+                "addressPrefix": "10.2.3.0/24"
+              }
+            }
+          ]
+        },
+        "reasoning": {
+          "whyChosen": "Secondary virtual network for disaster recovery target with non-overlapping IP space. Mirrors primary network structure for seamless failover.",
+          "alternativesConsidered": ["Same IP space with routing", "Simplified single subnet"],
+          "tradeoffs": "Non-overlapping IP space avoids routing conflicts but requires IP planning during failover operations."
+        },
+        "dependencies": ["rg-dr-secondary-westus2"],
+        "references": [
+          {
+            "title": "Site Recovery network architecture",
+            "url": "https://learn.microsoft.com/azure/site-recovery/azure-to-azure-architecture#target-resources"
+          }
+        ]
+      },
+      {
+        "name": "vm-web-01",
+        "type": "Microsoft.Compute/virtualMachines",
+        "subtype": "Virtual Machine",
+        "location": "eastus2",
+        "sku": "Standard_D2s_v5",
+        "properties": {
+          "hardwareProfile": {
+            "vmSize": "Standard_D2s_v5"
+          },
+          "storageProfile": {
+            "osDisk": {
+              "createOption": "FromImage",
+              "managedDisk": {
+                "storageAccountType": "Premium_LRS"
+              },
+              "caching": "ReadWrite"
+            }
+          },
+          "osProfile": {
+            "computerName": "vm-web-01",
+            "adminUsername": "azureuser"
+          },
+          "networkProfile": {
+            "networkInterfaces": [
+              {
+                "properties": {
+                  "primary": true
+                }
+              }
+            ]
+          },
+          "securityProfile": {
+            "securityType": "TrustedLaunch"
+          }
+        },
+        "reasoning": {
+          "whyChosen": "Web tier virtual machine with Standard_D2s_v5 size providing balanced compute and memory for web workloads. Premium SSD ensures good IOPS for site recovery replication.",
+          "alternativesConsidered": ["Standard_B2s", "Standard_D4s_v5"],
+          "tradeoffs": "D2s_v5 provides good balance of performance and cost. Trusted Launch enables secure boot capabilities."
+        },
+        "dependencies": ["rg-dr-primary-eastus2", "vnet-primary-eastus2"],
+        "dependencyReasoning": "VM must be deployed in primary resource group and connected to primary virtual network subnet.",
+        "references": [
+          {
+            "title": "Azure VM sizes",
+            "url": "https://learn.microsoft.com/azure/virtual-machines/sizes/overview"
+          }
+        ]
+      },
+      {
+        "name": "vm-app-01", 
+        "type": "Microsoft.Compute/virtualMachines",
+        "subtype": "Virtual Machine",
+        "location": "eastus2",
+        "sku": "Standard_E4s_v5",
+        "properties": {
+          "hardwareProfile": {
+            "vmSize": "Standard_E4s_v5"
+          },
+          "storageProfile": {
+            "osDisk": {
+              "createOption": "FromImage",
+              "managedDisk": {
+                "storageAccountType": "Premium_LRS"
+              },
+              "caching": "ReadWrite"
+            }
+          },
+          "osProfile": {
+            "computerName": "vm-app-01",
+            "adminUsername": "azureuser"
+          },
+          "networkProfile": {
+            "networkInterfaces": [
+              {
+                "properties": {
+                  "primary": true
+                }
+              }
+            ]
+          },
+          "securityProfile": {
+            "securityType": "TrustedLaunch"
+          }
+        },
+        "reasoning": {
+          "whyChosen": "Application tier VM with memory-optimized E4s_v5 size for application processing. Premium SSD provides consistent performance for application workloads and replication.",
+          "alternativesConsidered": ["Standard_D4s_v5", "Standard_E2s_v5"],
+          "tradeoffs": "E4s_v5 provides more memory for application processing but higher cost than general purpose alternatives."
+        },
+        "dependencies": ["rg-dr-primary-eastus2", "vnet-primary-eastus2"],
+        "dependencyReasoning": "Application VM requires placement in primary resource group and application subnet.",
+        "references": [
+          {
+            "title": "Memory optimized VM sizes",
+            "url": "https://learn.microsoft.com/azure/virtual-machines/sizes/memory-optimized"
+          }
+        ]
+      },
+      {
+        "name": "vm-db-01",
+        "type": "Microsoft.Compute/virtualMachines",
+        "subtype": "Virtual Machine", 
+        "location": "eastus2",
+        "sku": "Standard_E8s_v5",
+        "properties": {
+          "hardwareProfile": {
+            "vmSize": "Standard_E8s_v5"
+          },
+          "storageProfile": {
+            "osDisk": {
+              "createOption": "FromImage",
+              "managedDisk": {
+                "storageAccountType": "Premium_LRS"
+              },
+              "caching": "ReadWrite"
+            },
+            "dataDisks": [
+              {
+                "lun": 0,
+                "createOption": "Empty",
+                "diskSizeGB": 1024,
+                "managedDisk": {
+                  "storageAccountType": "Premium_LRS"
+                },
+                "caching": "None"
+              }
+            ]
+          },
+          "osProfile": {
+            "computerName": "vm-db-01",
+            "adminUsername": "azureuser"
+          },
+          "networkProfile": {
+            "networkInterfaces": [
+              {
+                "properties": {
+                  "primary": true
+                }
+              }
+            ]
+          },
+          "securityProfile": {
+            "securityType": "TrustedLaunch"
+          }
+        },
+        "reasoning": {
+          "whyChosen": "Database tier VM with high memory E8s_v5 size for database workloads. Separate data disk with no caching optimizes database performance and Site Recovery replication.",
+          "alternativesConsidered": ["Standard_E4s_v5", "Standard_DS4_v2"],
+          "tradeoffs": "E8s_v5 provides excellent database performance with high memory but at premium cost. Separate data disk ensures database isolation."
+        },
+        "dependencies": ["rg-dr-primary-eastus2", "vnet-primary-eastus2"],
+        "dependencyReasoning": "Database VM must be deployed in primary resource group database subnet for security isolation.",
+        "references": [
+          {
+            "title": "SQL Server on Azure VMs",
+            "url": "https://learn.microsoft.com/azure/azure-sql/virtual-machines/windows/performance-guidelines-best-practices-vm-size"
+          }
+        ]
+      },
+      {
+        "name": "stor-cache-eastus2",
+        "type": "Microsoft.Storage/storageAccounts",
+        "subtype": "Storage Account",
+        "location": "eastus2",
+        "sku": "Standard_LRS",
+        "properties": {
+          "accountTier": "Standard",
+          "replicationType": "LRS",
+          "accessTier": "Hot",
+          "minimumTlsVersion": "TLS1_2",
+          "allowBlobPublicAccess": false,
+          "supportsHttpsTrafficOnly": true
+        },
+        "reasoning": {
+          "whyChosen": "Cache storage account for Site Recovery temporary data during replication process. LRS is sufficient as this is temporary cache storage with automatic cleanup.",
+          "alternativesConsidered": ["Standard_GRS", "Premium_LRS"],
+          "tradeoffs": "LRS provides lower cost for temporary cache storage. GRS not needed as this is temporary data managed by Site Recovery."
+        },
+        "dependencies": ["rg-dr-primary-eastus2"],
+        "references": [
+          {
+            "title": "Site Recovery storage requirements",
+            "url": "https://learn.microsoft.com/azure/site-recovery/azure-to-azure-architecture#storage-in-the-source-region"
+          }
+        ]
+      },
+      {
+        "name": "stor-target-westus2",
+        "type": "Microsoft.Storage/storageAccounts",
+        "subtype": "Storage Account",
+        "location": "westus2",
+        "sku": "Standard_GRS",
+        "properties": {
+          "accountTier": "Standard",
+          "replicationType": "GRS",
+          "accessTier": "Hot",
+          "minimumTlsVersion": "TLS1_2",
+          "allowBlobPublicAccess": false,
+          "supportsHttpsTrafficOnly": true
+        },
+        "reasoning": {
+          "whyChosen": "Target storage account in secondary region for replication data. GRS provides additional durability for critical replicated VM data.",
+          "alternativesConsidered": ["Standard_LRS", "Standard_ZRS"],
+          "tradeoffs": "GRS ensures replicated data survives regional outages but increases storage costs. Critical for disaster recovery data protection."
+        },
+        "dependencies": ["rg-dr-secondary-westus2"],
+        "references": [
+          {
+            "title": "Storage redundancy options",
+            "url": "https://learn.microsoft.com/azure/storage/common/storage-redundancy"
+          }
+        ]
+      },
+      {
+        "name": "tm-dr-profile",
+        "type": "Microsoft.Network/trafficmanagerprofiles",
+        "subtype": "Traffic Manager Profile",
+        "location": "global",
+        "sku": "Standard",
+        "properties": {
+          "profileStatus": "Enabled",
+          "trafficRoutingMethod": "Priority",
+          "dnsConfig": {
+            "relativeName": "contoso-app-dr",
+            "fqdn": "contoso-app-dr.trafficmanager.net",
+            "ttl": 30
+          },
+          "monitorConfig": {
+            "profileMonitorStatus": "Online",
+            "protocol": "HTTPS",
+            "port": 443,
+            "path": "/health",
+            "intervalInSeconds": 10,
+            "toleratedNumberOfFailures": 3,
+            "timeoutInSeconds": 10
+          }
+        },
+        "reasoning": {
+          "whyChosen": "Traffic Manager with priority routing for DNS-based failover automation. Low TTL (30 seconds) and aggressive monitoring (10 second intervals) enables fast failover detection and DNS updates.",
+          "alternativesConsidered": ["Azure DNS only", "Application Gateway"],
+          "tradeoffs": "Traffic Manager provides automated failover but adds DNS query latency. Priority method ensures predictable failover behavior."
+        },
+        "dependencies": [],
+        "references": [
+          {
+            "title": "Traffic Manager with Site Recovery",
+            "url": "https://learn.microsoft.com/azure/site-recovery/concepts-traffic-manager-with-site-recovery"
+          },
+          {
+            "title": "Traffic Manager priority routing",
+            "url": "https://learn.microsoft.com/azure/traffic-manager/traffic-manager-configure-priority-routing-method"
+          }
+        ]
+      },
+      {
+        "name": "tm-endpoint-primary",
+        "type": "Microsoft.Network/trafficManagerProfiles/azureEndpoints",
+        "subtype": "Traffic Manager Endpoint",
+        "location": "global",
+        "sku": "N/A",
+        "properties": {
+          "endpointStatus": "Enabled",
+          "priority": 1,
+          "weight": 1,
+          "target": "app-primary-eastus2.cloudapp.azure.com",
+          "endpointLocation": "eastus2"
+        },
+        "reasoning": {
+          "whyChosen": "Primary endpoint with priority 1 directing traffic to East US 2 application. High priority ensures primary region receives traffic when healthy.",
+          "alternativesConsidered": ["External endpoint", "Nested endpoint"],
+          "tradeoffs": "Azure endpoint provides better integration but requires Azure-hosted applications. Priority 1 ensures primary preference."
+        },
+        "dependencies": ["tm-dr-profile"],
+        "dependencyReasoning": "Endpoint must be created within the Traffic Manager profile.",
+        "references": [
+          {
+            "title": "Traffic Manager endpoint types",
+            "url": "https://learn.microsoft.com/azure/traffic-manager/traffic-manager-endpoint-types"
+          }
+        ]
+      },
+      {
+        "name": "tm-endpoint-secondary",
+        "type": "Microsoft.Network/trafficManagerProfiles/azureEndpoints", 
+        "subtype": "Traffic Manager Endpoint",
+        "location": "global",
+        "sku": "N/A",
+        "properties": {
+          "endpointStatus": "Enabled",
+          "priority": 2,
+          "weight": 1,
+          "target": "app-secondary-westus2.cloudapp.azure.com",
+          "endpointLocation": "westus2"
+        },
+        "reasoning": {
+          "whyChosen": "Secondary endpoint with priority 2 for failover to West US 2. Lower priority ensures failover only occurs when primary is unhealthy.",
+          "alternativesConsidered": ["Same priority with geographic routing", "Disabled endpoint"],
+          "tradeoffs": "Priority 2 ensures clear failover hierarchy but requires manual intervention for load balancing scenarios."
+        },
+        "dependencies": ["tm-dr-profile"],
+        "dependencyReasoning": "Failover endpoint requires Traffic Manager profile for configuration.",
+        "references": [
+          {
+            "title": "Traffic Manager failover configuration",
+            "url": "https://learn.microsoft.com/azure/reliability/reliability-traffic-manager#cross-region-disaster-recovery-and-business-continuity"
+          }
+        ]
+      },
+      {
+        "name": "automation-account-dr",
+        "type": "Microsoft.Automation/automationAccounts",
+        "subtype": "Automation Account",
+        "location": "eastus2", 
+        "sku": "Basic",
+        "properties": {
+          "sku": {
+            "name": "Basic"
+          },
+          "encryption": {
+            "keySource": "Microsoft.Automation"
+          }
+        },
+        "reasoning": {
+          "whyChosen": "Automation Account for post-failover scripts and DNS update automation. Provides PowerShell runbook capabilities for complex failover orchestration.",
+          "alternativesConsidered": ["Logic Apps", "Azure Functions"],
+          "tradeoffs": "Automation Account provides rich PowerShell scripting but requires additional management. Logic Apps simpler but less flexible."
+        },
+        "dependencies": ["rg-dr-primary-eastus2"],
+        "references": [
+          {
+            "title": "Azure Automation overview",
+            "url": "https://learn.microsoft.com/azure/automation/overview"
+          }
+        ]
+      }
+    ],
+    "validation": "All resources can be deployed coherently. Recovery Services Vault in primary region will orchestrate VM replication to secondary region with proper network isolation. Traffic Manager provides DNS failover automation. Storage accounts support Site Recovery cache and target requirements.",
+    "architecturePrinciples": [
+      "Highly available",
+      "Disaster recovery enabled", 
+      "Automated failover",
+      "Secure",
+      "Cross-region resilient",
+      "DNS failover automated",
+      "Network isolated"
+    ],
+    "overallReasoning": {
+      "summary": "This architecture implements Azure Site Recovery-based disaster recovery from East US 2 to West US 2 with automated DNS failover. VMs in the primary region are replicated to the secondary region using Azure Site Recovery. Traffic Manager provides DNS-based failover automation with health monitoring. The solution includes proper network isolation with non-overlapping IP spaces and storage accounts optimized for Site Recovery operations.",
+      "tradeoffs": "Cross-region replication introduces some latency and cost but provides comprehensive disaster recovery. Traffic Manager adds DNS query latency but enables automated failover. Premium storage increases costs but ensures consistent performance for critical workloads and replication."
+    },
+    "references": [
+      {
+        "title": "Azure to Azure disaster recovery architecture",
+        "url": "https://learn.microsoft.com/azure/site-recovery/azure-to-azure-architecture"
+      },
+      {
+        "title": "Azure Site Recovery networking guidance",
+        "url": "https://learn.microsoft.com/azure/site-recovery/azure-to-azure-about-networking"
+      },
+      {
+        "title": "Traffic Manager with Site Recovery",
+        "url": "https://learn.microsoft.com/azure/site-recovery/concepts-traffic-manager-with-site-recovery"
+      }
+    ]
+  }
+}

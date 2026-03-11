@@ -1,0 +1,33 @@
+{
+  "overallScore": 0.83,
+  "dimensions": {
+    "goalAlignment": 0.92,
+    "wafConformance": 0.65,
+    "dependencyCompleteness": 0.9,
+    "deploymentViability": 0.82
+  },
+  "risks": [
+    "Y1 (Consumption) plan is deprecated for new deployments; Azure best practices mandate Flex Consumption (FC1) which provides VNet support, faster scaling, and per-function scaling",
+    "No Application Insights resource included — Azure Functions best practices require Application Insights for monitoring, exception tracking, and dependency tracing",
+    "No managed identity configured — the plan uses Key Vault secret references with connection strings instead of User-Assigned Managed Identity with RBAC role assignments, which is the recommended authentication pattern",
+    "Key Vault purge protection is disabled (enablePurgeProtection: false) — WAF security baseline and Azure Policy both strongly recommend enabling purge protection to prevent malicious or accidental permanent deletion",
+    "Cosmos DB and Key Vault have publicNetworkAccess set to Enabled — WAF recommends private endpoints and network isolation for production workloads",
+    "Storage Account uses Standard_LRS (local redundancy only) — no zone or geo-redundancy for the Functions runtime storage",
+    "Y1 Consumption plan has a 5-minute execution timeout which may be insufficient for converting large PDF files",
+    "No diagnostic settings (Microsoft.Insights/diagnosticSettings) configured for any resource — IaC rules require diagnostic settings for Function Apps",
+    "Cosmos DB enableAutomaticFailover is false with single-region deployment — no resilience against regional outages"
+  ],
+  "correctionsRecommended": [
+    "Replace Y1 (Consumption) App Service Plan with FC1 (Flex Consumption) and update Function App to use functionAppConfig with deployment.storage configuration instead of app settings",
+    "Add an Application Insights resource (Microsoft.Insights/components) and wire it to the Function App via APPLICATIONINSIGHTS_CONNECTION_STRING",
+    "Add a User-Assigned Managed Identity resource and assign RBAC roles: Storage Blob Data Owner, Storage Blob Data Contributor, Storage Queue Data Contributor, Storage Table Data Contributor, and Monitoring Metrics Publisher",
+    "Set enablePurgeProtection to true on the Key Vault resource",
+    "Add cosmos-pdf-converter-prod-001 as an explicit dependency of func-pdf-converter-prod-001 since the Function App consumes Cosmos DB connection strings",
+    "Add Microsoft.Insights/diagnosticSettings resources to capture logs for the Function App and other resources",
+    "Consider upgrading Storage Account to Standard_ZRS for zone-redundant Functions runtime storage",
+    "Evaluate enabling Cosmos DB automatic failover for improved reliability",
+    "Disable storage account local auth (key access) per IaC best practices and use managed identity instead"
+  ],
+  "hardDependencies": [],
+  "deployable": 1
+}

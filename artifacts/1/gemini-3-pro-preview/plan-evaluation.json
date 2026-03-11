@@ -1,0 +1,30 @@
+{
+  "overallScore": 0.83,
+  "dimensions": {
+    "goalAlignment": 0.85,
+    "wafConformance": 0.6,
+    "dependencyCompleteness": 0.95,
+    "deploymentViability": 0.92
+  },
+  "risks": [
+    "No managed identity configured on Container App — credential management burden for Cosmos DB and OpenAI access",
+    "No Key Vault resource for centralized secret management — secrets risk exposure in app configuration",
+    "No VNet integration or private networking — all resources are publicly accessible",
+    "Single-region Cosmos DB deployment with no failover replica configured",
+    "No autoscaling rules defined on the Container App for handling traffic spikes",
+    "gpt-35-turbo model version 0301 is legacy; newer model versions offer improved capabilities",
+    "No Application Insights resource for end-to-end distributed tracing and deep telemetry"
+  ],
+  "correctionsRecommended": [
+    "Add a user-assigned managed identity to the Container App and configure RBAC for Cosmos DB and Azure OpenAI access",
+    "Add an Azure Key Vault resource and store connection strings, API keys, and secrets there instead of in app configuration",
+    "Consider adding VNet integration with private endpoints for Cosmos DB and Azure OpenAI to restrict public access",
+    "Define Container App scaling rules (HTTP or custom) to handle variable request loads",
+    "Add an Application Insights resource connected to the Log Analytics workspace for distributed tracing",
+    "Upgrade gpt-35-turbo deployment to a newer model version (e.g., 0613 or later)",
+    "Add resource tags across all resources for cost tracking and operational governance",
+    "Enable CORS policy on the Container App ingress configuration"
+  ],
+  "hardDependencies": [],
+  "deployable": 1
+}
