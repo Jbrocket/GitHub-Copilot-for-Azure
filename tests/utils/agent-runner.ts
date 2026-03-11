@@ -96,6 +96,13 @@ const testRunId = process.env.TEST_RUN_ID;
  */
 const modelOverride = process.env.MODEL_OVERRIDE?.trim();
 
+/**
+ * Tools to exclude from agent sessions.
+ */
+const globalExcludedTools = process.env.EXCLUDED_TOOLS
+  ? process.env.EXCLUDED_TOOLS.split(",").map((t) => t.trim()).filter(Boolean)
+  : undefined;
+
 export interface AgentRunConfig {
   setup?: (workspace: string) => Promise<void>;
   prompt: string;
@@ -119,6 +126,12 @@ export interface AgentRunConfig {
    * Takes precedence over MODEL_OVERRIDE env var.
    */
   model?: string;
+
+  /**
+   * Tools to exclude from the agent session.
+   * Takes precedence over EXCLUDED_TOOLS env var.
+   */
+  excludedTools?: string[];
 }
 
 interface KeywordOptions {
@@ -528,6 +541,7 @@ export function useAgentRunner() {
         onPermissionRequest: approveAll,
         skillDirectories: [skillDirectory],
         disabledSkills: disabledSkills,
+        excludedTools: config.excludedTools || globalExcludedTools,
         mcpServers: {
           azure: {
             type: "stdio",
