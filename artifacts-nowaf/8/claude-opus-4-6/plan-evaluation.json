@@ -1,0 +1,29 @@
+{
+  "overallScore": 0.9,
+  "dimensions": {
+    "goalAlignment": 0.95,
+    "wafConformance": 0.72,
+    "dependencyCompleteness": 0.97,
+    "deploymentViability": 0.95
+  },
+  "risks": [
+    "Single-region deployment (eastus) with no zone redundancy — no failover protection for a regional outage",
+    "All resources use public endpoints with no private networking or VNet integration",
+    "Cosmos DB has publicNetworkAccess set to Enabled — data plane exposed to the internet",
+    "ML online endpoint uses key-based auth instead of AAD token auth, reducing zero-trust posture",
+    "Storage account uses Standard_LRS — no zone or geo redundancy for ML workspace artifacts",
+    "ACR Basic tier (10 GiB) may become insufficient as model image count and size grow",
+    "No explicit continuous backup configuration on Cosmos DB for point-in-time recovery"
+  ],
+  "correctionsRecommended": [
+    "Enable zone redundancy on the Cosmos DB account location (isZoneRedundant: true) for higher availability",
+    "Add private endpoints for Key Vault, Storage Account, Cosmos DB, and ML workspace to enforce network isolation",
+    "Switch the ML online endpoint authMode from Key to AADToken for zero-trust authentication",
+    "Upgrade Storage Account SKU from Standard_LRS to Standard_ZRS for zone-redundant storage of ML artifacts",
+    "Enable diagnostic settings on Cosmos DB to forward metrics and logs to the existing Log Analytics workspace",
+    "Configure continuous backup on Cosmos DB for point-in-time restore capability",
+    "Use managed identity-based RBAC for ML workspace to Cosmos DB access instead of connection strings"
+  ],
+  "hardDependencies": [],
+  "deployable": 1
+}

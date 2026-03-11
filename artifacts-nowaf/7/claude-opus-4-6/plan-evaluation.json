@@ -1,0 +1,28 @@
+{
+  "overallScore": 0.87,
+  "dimensions": {
+    "goalAlignment": 0.9,
+    "wafConformance": 0.72,
+    "dependencyCompleteness": 0.95,
+    "deploymentViability": 0.92
+  },
+  "risks": [
+    "No private endpoints or VNet isolation — public network access is enabled on ML workspace, Log Analytics, and storage accounts, exposing the pipeline to internet-facing attack surface",
+    "Storage accounts use Standard_LRS (locally redundant only); a single datacenter failure could cause data loss for training data and ML artifacts",
+    "Encryption uses Microsoft-managed keys by default; user goal explicitly requires encrypting all outputs, but CMK via Key Vault is only documented as an upgrade path, not configured",
+    "Storage account local auth (shared key access) is not explicitly disabled, which conflicts with Azure best practices that mandate disabling key-based access in favor of RBAC/managed identity",
+    "No resource tagging strategy defined for cost tracking, environment classification, or operational management",
+    "Basic ACR SKU has 10 GiB storage limit and does not support private link or content trust, limiting production hardening options"
+  ],
+  "correctionsRecommended": [
+    "Disable local auth (allowSharedKeyAccess: false) on both storage accounts to enforce managed-identity-only access per Azure best practices",
+    "Add private endpoints for Key Vault, both storage accounts, ML workspace, and Container Registry to enable network-isolated access",
+    "Add a VNet and subnet resources to serve as the network isolation foundation for private endpoints",
+    "Consider upgrading storage redundancy from Standard_LRS to Standard_ZRS for zone-level resilience on production training data",
+    "Configure customer-managed key (CMK) encryption on storage accounts using the existing Key Vault to fully satisfy the encrypt-all-outputs requirement",
+    "Upgrade Container Registry from Basic to at least Standard (or Premium for private link) to support production workload storage and network isolation needs",
+    "Add a resource tagging convention (e.g., environment, project, cost-center) across all resources for operational governance"
+  ],
+  "hardDependencies": [],
+  "deployable": 1
+}

@@ -1,0 +1,29 @@
+{
+  "overallScore": 0.82,
+  "dimensions": {
+    "goalAlignment": 0.95,
+    "wafConformance": 0.7,
+    "dependencyCompleteness": 0.8,
+    "deploymentViability": 0.85
+  },
+  "risks": [
+    "Consumption plan (Y1) introduces cold starts (1-3s) for webhook-driven workload; Azure best practices now recommend Flex Consumption (FC1) over Y1 Dynamic",
+    "Cosmos DB has publicNetworkAccess set to Enabled with no firewall rules or private endpoint, exposing the data plane to the public internet",
+    "Single-region deployment (eastus) with LRS storage and no geo-redundancy provides no disaster recovery capability",
+    "Storage account uses connection-string-based AzureWebJobsStorage instead of identity-based access, which conflicts with the plan's own managed-identity-first principle",
+    "No RBAC role assignments are defined for the managed identity to access Key Vault, Cosmos DB, or Storage — the identity exists but has no permissions",
+    "Storage account does not explicitly disable local auth (allowSharedKeyAccess not set to false), leaving key-based access available"
+  ],
+  "correctionsRecommended": [
+    "Upgrade App Service Plan from Y1 (Consumption) to FC1 (Flex Consumption) with functionAppConfig and deployment.storage configuration per Azure Functions deployment best practices",
+    "Add RBAC role assignment resources for the managed identity: Storage Blob Data Owner, Storage Blob Data Contributor, Storage Queue Data Contributor, Storage Table Data Contributor, and Monitoring Metrics Publisher on the storage account",
+    "Add RBAC role assignment for Key Vault Secrets User on the Key Vault for the managed identity",
+    "Add RBAC role assignment for Cosmos DB data-plane access (e.g., Cosmos DB Built-in Data Contributor) for the managed identity",
+    "Set allowSharedKeyAccess to false on the storage account and switch AzureWebJobsStorage to identity-based connection (AzureWebJobsStorage__accountName)",
+    "Add Microsoft.Insights/diagnosticSettings resources for Function App, Key Vault, and Cosmos DB to send logs to the Log Analytics workspace",
+    "Restrict Cosmos DB publicNetworkAccess or add IP/VNet firewall rules",
+    "Add a resource tagging strategy (e.g., environment, project, cost-center) for operational governance"
+  ],
+  "hardDependencies": [],
+  "deployable": 1
+}

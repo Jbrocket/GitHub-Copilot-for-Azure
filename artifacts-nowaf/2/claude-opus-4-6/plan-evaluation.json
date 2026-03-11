@@ -1,0 +1,25 @@
+{
+  "overallScore": 0.88,
+  "dimensions": {
+    "goalAlignment": 0.93,
+    "wafConformance": 0.78,
+    "dependencyCompleteness": 0.88,
+    "deploymentViability": 0.93
+  },
+  "risks": [
+    "Public network access enabled on ACR, Cosmos DB, and Key Vault — lacks network isolation recommended for production e-commerce workloads",
+    "Redis Standard tier does not support zone redundancy or VNet integration, creating a single-zone failure point for caching layer",
+    "Service Bus Standard tier lacks zone redundancy and dedicated throughput capacity, risking message processing delays under load",
+    "No RBAC role assignment resources defined (acrPull for managed identity on ACR, Key Vault Secrets User for managed identity on Key Vault)",
+    "No resource tagging strategy for cost allocation and operational governance across the 10 resources"
+  ],
+  "correctionsRecommended": [
+    "Add private endpoints for Cosmos DB, ACR, and Key Vault to restrict public network access and improve security posture",
+    "Upgrade Redis to Premium tier for zone redundancy, VNet injection, and data persistence in production",
+    "Consider upgrading Service Bus to Premium tier for zone redundancy, dedicated capacity, and VNet integration",
+    "Add explicit Microsoft.Authorization/roleAssignments resources for acrPull (identity → ACR) and Key Vault Secrets User (identity → Key Vault)",
+    "Define a resource tagging convention (environment, team, cost center) and apply across all resources"
+  ],
+  "hardDependencies": [],
+  "deployable": 1
+}

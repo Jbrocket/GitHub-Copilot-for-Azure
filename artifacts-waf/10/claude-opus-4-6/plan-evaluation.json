@@ -1,0 +1,30 @@
+{
+  "overallScore": 0.84,
+  "dimensions": {
+    "goalAlignment": 0.92,
+    "wafConformance": 0.62,
+    "dependencyCompleteness": 0.9,
+    "deploymentViability": 0.92
+  },
+  "risks": [
+    "No managed identity or RBAC configuration — resources may default to key-based authentication, violating least-privilege principles",
+    "No monitoring or diagnostics resources (Log Analytics workspace, diagnostic settings) — operational blind spots in production",
+    "Cosmos DB serverless is single-region only with no disaster recovery or geo-redundancy",
+    "IoT Edge AI module deployment is a post-provisioning manual step not captured in IaC",
+    "SMS connector (Twilio or Azure Communication Services) requires separate external account setup after deployment",
+    "All resources use public network access with no private endpoints — larger attack surface",
+    "Storage account local auth (key access) not explicitly disabled per Azure security best practices"
+  ],
+  "correctionsRecommended": [
+    "Add managed identity configuration for service-to-service authentication (Stream Analytics to IoT Hub, Cosmos DB, and Service Bus)",
+    "Add a Log Analytics workspace resource and enable diagnostic settings on all resources for monitoring and alerting",
+    "Add Azure Key Vault for centralized secrets management",
+    "Explicitly disable local auth (key access) on the storage account (set allowSharedKeyAccess to false)",
+    "Disable key-based authentication on Cosmos DB and configure data-plane RBAC",
+    "Add resource tags across all resources for cost tracking and operational management",
+    "Document post-provisioning steps for IoT Edge AI module deployment manifest and container image configuration",
+    "Add explicit Cosmos DB database and container sub-resources for the anomaly event store"
+  ],
+  "hardDependencies": [],
+  "deployable": 1
+}

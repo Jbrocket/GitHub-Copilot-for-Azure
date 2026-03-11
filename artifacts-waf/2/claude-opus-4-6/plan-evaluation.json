@@ -1,0 +1,33 @@
+{
+  "overallScore": 0.9,
+  "dimensions": {
+    "goalAlignment": 0.95,
+    "wafConformance": 0.82,
+    "dependencyCompleteness": 0.88,
+    "deploymentViability": 0.95
+  },
+  "risks": [
+    "Single-region deployment with no cross-region disaster recovery — a regional outage would affect all services",
+    "Standard-tier resources (ACR, Redis, Service Bus) lack private networking support, exposing data plane endpoints publicly",
+    "No private endpoints configured for Cosmos DB or PostgreSQL — database traffic traverses public networks unless VNet service endpoints are enforced at deployment",
+    "Cosmos DB does not explicitly disable key-based access; RBAC-only mode is recommended per WAF security guidance",
+    "No explicit resource tagging strategy defined — impacts cost attribution, governance, and operational excellence",
+    "No Azure Firewall or egress control for AKS cluster outbound traffic — WAF security guidance recommends controlling cluster egress",
+    "No WAF/Application Gateway in front of the Istio ingress gateway for Layer 7 DDoS and bot protection",
+    "Redis Standard tier lacks persistence — cache data is lost on node failure or maintenance restart"
+  ],
+  "correctionsRecommended": [
+    "Add private endpoints for Cosmos DB and PostgreSQL Flexible Server to restrict database access to the VNet",
+    "Upgrade ACR to Premium SKU to enable private link and geo-replication when production-hardening",
+    "Add explicit tags (environment, service, costCenter, owner) to all resources for governance and cost tracking",
+    "Configure Azure Firewall or NSG egress rules to control AKS cluster outbound traffic per WAF security recommendations",
+    "Add Cosmos DB property 'disableLocalAuth: true' to enforce Entra ID / managed identity authentication only",
+    "Add managed identity dependency to Cosmos DB and PostgreSQL resources for passwordless authentication alignment with stated architecture principles",
+    "Consider upgrading Redis to Premium tier for VNet injection and data persistence, or add AOF/RDB persistence plan",
+    "Consider adding a geo-replication strategy for Cosmos DB and PostgreSQL read replicas as the workload scales",
+    "Add Microsoft Defender for Containers configuration to the AKS cluster for runtime threat detection",
+    "Consider adding an Application Gateway with WAF v2 in front of the Istio external ingress gateway for production traffic protection"
+  ],
+  "hardDependencies": [],
+  "deployable": 1
+}

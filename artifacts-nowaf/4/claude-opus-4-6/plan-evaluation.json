@@ -1,0 +1,27 @@
+{
+  "overallScore": 0.87,
+  "dimensions": {
+    "goalAlignment": 0.95,
+    "wafConformance": 0.72,
+    "dependencyCompleteness": 0.95,
+    "deploymentViability": 0.82
+  },
+  "risks": [
+    "VMSS Flexible orchestration with Rolling upgrade policy requires Application Health Extension, which is not included in either VMSS resource — rolling upgrades will not function without it",
+    "SQL Managed Instance has zoneRedundant set to false — the data tier is not zone-redundant despite presentation and application tiers being distributed across zones 1, 2, and 3",
+    "No monitoring or diagnostics resources (Log Analytics workspace, Application Insights) are included — operational visibility into the infrastructure will be limited",
+    "No Key Vault resource for secure storage of SQL MI administrator credentials or VMSS SSH keys — secrets management relies on external configuration",
+    "No autoscale configuration for the application-tier VMSS (vmss-application-prod-001) — only the presentation tier has autoscale rules",
+    "Presentation-tier NSG allows HTTP/HTTPS inbound from any source (*) with no WAF or DDoS protection layer in front of the load balancer"
+  ],
+  "correctionsRecommended": [
+    "Add Application Health Extension to both VMSS virtual machine profiles to satisfy the Rolling upgrade policy requirement on Flexible orchestration",
+    "Add a Log Analytics workspace and enable diagnostic settings on the Load Balancer, NSGs, and SQL Managed Instance for centralized monitoring",
+    "Add an Azure Key Vault resource to store SQL MI admin password and VMSS SSH private keys, and reference it from the relevant resources",
+    "Add an autoscale settings resource (Microsoft.Insights/autoscaleSettings) targeting the application-tier VMSS for elastic scaling",
+    "Evaluate enabling zone redundancy on SQL MI (requires Business Critical tier) or explicitly document the single-zone risk as an accepted trade-off",
+    "Consider upgrading from L4 Load Balancer to Application Gateway with WAF v2 for layer-7 protection, or add Azure DDoS Protection Plan for the VNet"
+  ],
+  "hardDependencies": [],
+  "deployable": 1
+}

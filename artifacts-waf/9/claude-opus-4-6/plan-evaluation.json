@@ -1,0 +1,29 @@
+{
+  "overallScore": 0.87,
+  "dimensions": {
+    "goalAlignment": 0.95,
+    "wafConformance": 0.75,
+    "dependencyCompleteness": 0.88,
+    "deploymentViability": 0.92
+  },
+  "risks": [
+    "No Network Security Groups (NSGs) defined for subnets or NICs — VMs are reachable without network-level filtering rules",
+    "No monitoring or alerting resources (Log Analytics workspace, Azure Monitor alerts) for ASR replication health or VM metrics",
+    "Recovery plan references runbook 'runbook-dns-failover-prod-001' in endGroupActions but does not declare it as an explicit dependency, risking deployment ordering issues",
+    "No on-demand capacity reservation in West US to guarantee VM compute availability during a regional disaster",
+    "VMs do not have boot diagnostics enabled, which limits post-failover troubleshooting capability",
+    "Storage account 'stdrprimarycache001' does not disable local (shared key) authentication — best practice is to use managed identity and disable key-based access",
+    "Recovery Services vault has publicNetworkAccess set to Enabled — consider private endpoints for enhanced security"
+  ],
+  "correctionsRecommended": [
+    "Add NSGs for each subnet (snet-vms-prod-eastus-001, snet-vms-prod-westus-001) with appropriate inbound/outbound rules restricting traffic to required ports only",
+    "Add a Log Analytics workspace and configure diagnostic settings on the Recovery Services vault, VMs, and Automation Account for centralized monitoring",
+    "Add 'runbook-dns-failover-prod-001' to the dependencies array of 'asr-recovery-plan-prod-001' to ensure correct deployment ordering",
+    "Consider adding on-demand capacity reservations in the West US recovery region to guarantee VM SKU availability during widespread outages",
+    "Enable boot diagnostics on both VMs using a diagnostics storage account or managed storage for post-failover troubleshooting",
+    "Set 'allowSharedKeyAccess: false' on the cache storage account and use managed identity for ASR cache access",
+    "Add resource tags (environment, application, costCenter) across all resources for operational governance"
+  ],
+  "hardDependencies": [],
+  "deployable": 1
+}

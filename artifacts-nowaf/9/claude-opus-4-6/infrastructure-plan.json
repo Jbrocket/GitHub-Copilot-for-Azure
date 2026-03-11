@@ -1,0 +1,665 @@
+{
+  "meta": {
+    "planId": "plan-dr-east-west-001",
+    "generatedAt": "2026-03-11T12:50:19.339Z",
+    "version": "0.1-draft",
+    "status": "draft"
+  },
+  "inputs": {
+    "userGoal": "Configure a site recovery plan for disaster failover from East US to West US Azure region, replicate major VM workloads, and automate DNS failbacks."
+  },
+  "plan": {
+    "architecturePrinciples": [
+      "Highly available with cross-region disaster recovery",
+      "Automated failover and failback for minimal RTO/RPO",
+      "DNS-based traffic redirection on failover",
+      "Secure networking with NSGs in both regions",
+      "Infrastructure-as-Code for reproducibility"
+    ],
+    "resources": [
+      {
+        "name": "vnet-workload-prod-eastus-001",
+        "type": "Microsoft.Network/virtualNetworks",
+        "location": "eastus",
+        "sku": "N/A",
+        "properties": {
+          "addressSpace": {
+            "addressPrefixes": ["10.1.0.0/16"]
+          },
+          "subnets": [
+            {
+              "name": "snet-web-prod-eastus-001",
+              "addressPrefix": "10.1.1.0/24"
+            },
+            {
+              "name": "snet-app-prod-eastus-001",
+              "addressPrefix": "10.1.2.0/24"
+            }
+          ]
+        },
+        "reasoning": {
+          "whyChosen": "Foundational networking for primary workload VMs in East US. Separate subnets for web and app tiers follow the Well-Architected Framework segmentation principle.",
+          "alternativesConsidered": ["Hub-spoke topology with Azure Firewall"],
+          "tradeoffs": "Flat VNet is simpler but lacks centralized egress control. Appropriate for this DR-focused deployment."
+        },
+        "dependencies": [],
+        "references": [
+          {
+            "title": "Virtual Network overview",
+            "url": "https://learn.microsoft.com/azure/virtual-network/virtual-networks-overview"
+          }
+        ]
+      },
+      {
+        "name": "nsg-workload-prod-eastus-001",
+        "type": "Microsoft.Network/networkSecurityGroups",
+        "location": "eastus",
+        "sku": "N/A",
+        "properties": {
+          "securityRules": [
+            {
+              "name": "AllowHTTPSInbound",
+              "priority": 100,
+              "direction": "Inbound",
+              "access": "Allow",
+              "protocol": "Tcp",
+              "sourceAddressPrefix": "Internet",
+              "destinationPortRange": "443"
+            },
+            {
+              "name": "DenyAllInbound",
+              "priority": 4096,
+              "direction": "Inbound",
+              "access": "Deny",
+              "protocol": "*",
+              "sourceAddressPrefix": "*",
+              "destinationPortRange": "*"
+            }
+          ]
+        },
+        "reasoning": {
+          "whyChosen": "NSG provides network-level security filtering for primary region VMs. HTTPS-only inbound aligns with WAF security pillar.",
+          "alternativesConsidered": ["Azure Firewall for centralized filtering"],
+          "tradeoffs": "NSG is simpler and lower cost; less visibility than Azure Firewall but sufficient for this workload."
+        },
+        "dependencies": ["vnet-workload-prod-eastus-001"],
+        "dependencyReasoning": "NSG is associated with VNet subnets.",
+        "references": [
+          {
+            "title": "NSG overview",
+            "url": "https://learn.microsoft.com/azure/virtual-network/network-security-groups-overview"
+          }
+        ]
+      },
+      {
+        "name": "nic-vm-web-prod-eastus-001",
+        "type": "Microsoft.Network/networkInterfaces",
+        "location": "eastus",
+        "sku": "N/A",
+        "properties": {
+          "ipConfigurations": [
+            {
+              "privateIPAllocationMethod": "Dynamic",
+              "subnetRef": "snet-web-prod-eastus-001"
+            }
+          ],
+          "enableAcceleratedNetworking": true
+        },
+        "reasoning": {
+          "whyChosen": "Required NIC for the web-tier VM. Accelerated networking improves performance.",
+          "alternativesConsidered": ["Static IP allocation"],
+          "tradeoffs": "Dynamic IP is simpler for DR replication; static IP would require manual re-mapping."
+        },
+        "dependencies": ["vnet-workload-prod-eastus-001", "nsg-workload-prod-eastus-001"],
+        "dependencyReasoning": "NIC must reference a subnet in the VNet and is associated with the NSG.",
+        "references": [
+          {
+            "title": "Network interfaces overview",
+            "url": "https://learn.microsoft.com/azure/virtual-network/virtual-network-network-interface"
+          }
+        ]
+      },
+      {
+        "name": "nic-vm-app-prod-eastus-001",
+        "type": "Microsoft.Network/networkInterfaces",
+        "location": "eastus",
+        "sku": "N/A",
+        "properties": {
+          "ipConfigurations": [
+            {
+              "privateIPAllocationMethod": "Dynamic",
+              "subnetRef": "snet-app-prod-eastus-001"
+            }
+          ],
+          "enableAcceleratedNetworking": true
+        },
+        "reasoning": {
+          "whyChosen": "Required NIC for the app-tier VM. Accelerated networking improves throughput.",
+          "alternativesConsidered": ["Static IP allocation"],
+          "tradeoffs": "Dynamic IP is simpler for DR replication."
+        },
+        "dependencies": ["vnet-workload-prod-eastus-001", "nsg-workload-prod-eastus-001"],
+        "dependencyReasoning": "NIC must reference a subnet in the VNet and is associated with the NSG.",
+        "references": [
+          {
+            "title": "Network interfaces overview",
+            "url": "https://learn.microsoft.com/azure/virtual-network/virtual-network-network-interface"
+          }
+        ]
+      },
+      {
+        "name": "vm-web-prod-eastus-001",
+        "type": "Microsoft.Compute/virtualMachines",
+        "location": "eastus",
+        "sku": "Standard_D2s_v5",
+        "properties": {
+          "hardwareProfile": {
+            "vmSize": "Standard_D2s_v5"
+          },
+          "storageProfile": {
+            "osDisk": {
+              "createOption": "FromImage",
+              "managedDisk": {
+                "storageAccountType": "Premium_LRS"
+              },
+              "caching": "ReadWrite"
+            },
+            "imageReference": {
+              "publisher": "Canonical",
+              "offer": "ubuntu-24_04-lts",
+              "sku": "server",
+              "version": "latest"
+            }
+          },
+          "osProfile": {
+            "computerName": "vm-web-prod-001",
+            "adminUsername": "azureadmin"
+          },
+          "securityProfile": {
+            "securityType": "TrustedLaunch"
+          }
+        },
+        "reasoning": {
+          "whyChosen": "General-purpose VM for web-tier workload. Standard_D2s_v5 provides balanced compute/memory for web serving. Trusted Launch improves security posture. Premium SSD ensures fast OS disk I/O.",
+          "alternativesConsidered": ["Standard_B2s (burstable, lower cost)", "Standard_D4s_v5 (larger)"],
+          "tradeoffs": "D2s_v5 balances cost and performance; burstable B-series would be cheaper but less consistent under sustained load."
+        },
+        "dependencies": ["nic-vm-web-prod-eastus-001"],
+        "dependencyReasoning": "VM requires a NIC for network connectivity.",
+        "references": [
+          {
+            "title": "Virtual Machines overview",
+            "url": "https://learn.microsoft.com/azure/virtual-machines/overview"
+          },
+          {
+            "title": "Dv5 and Dsv5 series",
+            "url": "https://learn.microsoft.com/azure/virtual-machines/dv5-dsv5-series"
+          }
+        ]
+      },
+      {
+        "name": "vm-app-prod-eastus-001",
+        "type": "Microsoft.Compute/virtualMachines",
+        "location": "eastus",
+        "sku": "Standard_D2s_v5",
+        "properties": {
+          "hardwareProfile": {
+            "vmSize": "Standard_D2s_v5"
+          },
+          "storageProfile": {
+            "osDisk": {
+              "createOption": "FromImage",
+              "managedDisk": {
+                "storageAccountType": "Premium_LRS"
+              },
+              "caching": "ReadWrite"
+            },
+            "imageReference": {
+              "publisher": "Canonical",
+              "offer": "ubuntu-24_04-lts",
+              "sku": "server",
+              "version": "latest"
+            }
+          },
+          "osProfile": {
+            "computerName": "vm-app-prod-001",
+            "adminUsername": "azureadmin"
+          },
+          "securityProfile": {
+            "securityType": "TrustedLaunch"
+          }
+        },
+        "reasoning": {
+          "whyChosen": "General-purpose VM for app-tier workload. Same sizing as web tier for simplicity; can be independently scaled later.",
+          "alternativesConsidered": ["Standard_E2s_v5 (memory-optimized)"],
+          "tradeoffs": "D2s_v5 is general-purpose; if the app layer is memory-intensive, E-series would be better."
+        },
+        "dependencies": ["nic-vm-app-prod-eastus-001"],
+        "dependencyReasoning": "VM requires a NIC for network connectivity.",
+        "references": [
+          {
+            "title": "Virtual Machines overview",
+            "url": "https://learn.microsoft.com/azure/virtual-machines/overview"
+          }
+        ]
+      },
+      {
+        "name": "stcachedreastus001",
+        "type": "Microsoft.Storage/storageAccounts",
+        "location": "eastus",
+        "sku": "Standard_LRS",
+        "properties": {
+          "kind": "StorageV2",
+          "accessTier": "Hot",
+          "supportsHttpsTrafficOnly": true,
+          "minimumTlsVersion": "TLS1_2",
+          "allowBlobPublicAccess": false
+        },
+        "reasoning": {
+          "whyChosen": "Cache storage account required by Azure Site Recovery for replication from the source (East US) region. ASR writes replication data to this cache before sending to the target region. Standard_LRS is sufficient for transient cache data.",
+          "alternativesConsidered": ["Standard_GRS (geo-redundant)"],
+          "tradeoffs": "LRS is lower cost and sufficient since this is transient cache data; the actual DR protection is provided by ASR replication to the target region."
+        },
+        "dependencies": [],
+        "references": [
+          {
+            "title": "Storage account overview",
+            "url": "https://learn.microsoft.com/azure/storage/common/storage-account-overview"
+          },
+          {
+            "title": "ASR architecture - Azure to Azure",
+            "url": "https://learn.microsoft.com/azure/site-recovery/azure-to-azure-architecture"
+          }
+        ]
+      },
+      {
+        "name": "vnet-workload-prod-westus-001",
+        "type": "Microsoft.Network/virtualNetworks",
+        "location": "westus",
+        "sku": "N/A",
+        "properties": {
+          "addressSpace": {
+            "addressPrefixes": ["10.2.0.0/16"]
+          },
+          "subnets": [
+            {
+              "name": "snet-web-prod-westus-001",
+              "addressPrefix": "10.2.1.0/24"
+            },
+            {
+              "name": "snet-app-prod-westus-001",
+              "addressPrefix": "10.2.2.0/24"
+            }
+          ]
+        },
+        "reasoning": {
+          "whyChosen": "Target DR network in West US. Address space (10.2.0.0/16) is non-overlapping with primary (10.1.0.0/16) to allow VNet peering if needed. Subnet structure mirrors primary for consistent failover topology.",
+          "alternativesConsidered": ["Reuse same address space with ASR network mapping"],
+          "tradeoffs": "Non-overlapping CIDRs enable peering but require ASR network mapping configuration."
+        },
+        "dependencies": [],
+        "references": [
+          {
+            "title": "Virtual Network overview",
+            "url": "https://learn.microsoft.com/azure/virtual-network/virtual-networks-overview"
+          }
+        ]
+      },
+      {
+        "name": "nsg-workload-prod-westus-001",
+        "type": "Microsoft.Network/networkSecurityGroups",
+        "location": "westus",
+        "sku": "N/A",
+        "properties": {
+          "securityRules": [
+            {
+              "name": "AllowHTTPSInbound",
+              "priority": 100,
+              "direction": "Inbound",
+              "access": "Allow",
+              "protocol": "Tcp",
+              "sourceAddressPrefix": "Internet",
+              "destinationPortRange": "443"
+            },
+            {
+              "name": "DenyAllInbound",
+              "priority": 4096,
+              "direction": "Inbound",
+              "access": "Deny",
+              "protocol": "*",
+              "sourceAddressPrefix": "*",
+              "destinationPortRange": "*"
+            }
+          ]
+        },
+        "reasoning": {
+          "whyChosen": "Mirrored NSG in DR region ensures consistent security posture after failover.",
+          "alternativesConsidered": ["Create NSG only at failover time"],
+          "tradeoffs": "Pre-provisioning ensures zero delay on failover; small ongoing cost."
+        },
+        "dependencies": ["vnet-workload-prod-westus-001"],
+        "dependencyReasoning": "NSG is associated with DR VNet subnets.",
+        "references": [
+          {
+            "title": "NSG overview",
+            "url": "https://learn.microsoft.com/azure/virtual-network/network-security-groups-overview"
+          }
+        ]
+      },
+      {
+        "name": "rsv-dr-prod-westus-001",
+        "type": "Microsoft.RecoveryServices/vaults",
+        "location": "westus",
+        "sku": "Standard",
+        "properties": {
+          "publicNetworkAccess": "Enabled"
+        },
+        "reasoning": {
+          "whyChosen": "Recovery Services Vault is the core resource for Azure Site Recovery. Placed in the target DR region (West US) per Microsoft best practices. Standard SKU provides full ASR capabilities including VM replication, recovery plans, and multi-VM consistency.",
+          "alternativesConsidered": ["Third-party DR solutions (Zerto, Veeam)"],
+          "tradeoffs": "ASR is Azure-native with deep integration and no additional licensing; third-party tools may offer more features for hybrid scenarios."
+        },
+        "dependencies": [],
+        "references": [
+          {
+            "title": "Recovery Services vault overview",
+            "url": "https://learn.microsoft.com/azure/backup/backup-azure-recovery-services-vault-overview"
+          },
+          {
+            "title": "Create Recovery Services vault with Bicep",
+            "url": "https://learn.microsoft.com/azure/site-recovery/quickstart-create-vault-bicep"
+          }
+        ]
+      },
+      {
+        "name": "asr-policy-prod-001",
+        "type": "Microsoft.RecoveryServices/vaults/replicationPolicies",
+        "location": "westus",
+        "sku": "N/A",
+        "properties": {
+          "providerSpecificInput": {
+            "instanceType": "A2A",
+            "appConsistentFrequencyInMinutes": 240,
+            "crashConsistentFrequencyInMinutes": 5,
+            "recoveryPointHistory": 1440,
+            "multiVmSyncStatus": "Enable"
+          }
+        },
+        "reasoning": {
+          "whyChosen": "ASR replication policy defines RPO and retention. Crash-consistent snapshots every 5 minutes (RPO ~5 min). App-consistent every 4 hours captures application state. 24-hour recovery point retention. Multi-VM sync ensures consistent recovery across the web and app VMs.",
+          "alternativesConsidered": ["Lower frequency (15 min) for cost savings"],
+          "tradeoffs": "5-minute crash-consistent provides low RPO at higher storage cost; acceptable for production workloads."
+        },
+        "dependencies": ["rsv-dr-prod-westus-001"],
+        "dependencyReasoning": "Replication policy is a child resource of the Recovery Services Vault.",
+        "references": [
+          {
+            "title": "Azure to Azure disaster recovery architecture",
+            "url": "https://learn.microsoft.com/azure/site-recovery/azure-to-azure-architecture"
+          }
+        ]
+      },
+      {
+        "name": "asr-fabric-eastus",
+        "type": "Microsoft.RecoveryServices/vaults/replicationFabrics",
+        "location": "westus",
+        "sku": "N/A",
+        "properties": {
+          "customDetails": {
+            "instanceType": "Azure",
+            "location": "eastus"
+          }
+        },
+        "reasoning": {
+          "whyChosen": "Replication fabric represents the source region (East US) in the ASR topology. Required to define the source protection containers.",
+          "alternativesConsidered": [],
+          "tradeoffs": "No alternatives — required ASR component."
+        },
+        "dependencies": ["rsv-dr-prod-westus-001"],
+        "dependencyReasoning": "Fabric is a child resource of the Recovery Services Vault.",
+        "references": [
+          {
+            "title": "ASR replication fabrics Bicep reference",
+            "url": "https://learn.microsoft.com/azure/templates/microsoft.recoveryservices/vaults/replicationfabrics"
+          }
+        ]
+      },
+      {
+        "name": "asr-fabric-westus",
+        "type": "Microsoft.RecoveryServices/vaults/replicationFabrics",
+        "location": "westus",
+        "sku": "N/A",
+        "properties": {
+          "customDetails": {
+            "instanceType": "Azure",
+            "location": "westus"
+          }
+        },
+        "reasoning": {
+          "whyChosen": "Replication fabric for the target/DR region (West US). Required for bi-directional replication mapping and failback support.",
+          "alternativesConsidered": [],
+          "tradeoffs": "No alternatives — required ASR component for failback."
+        },
+        "dependencies": ["rsv-dr-prod-westus-001"],
+        "dependencyReasoning": "Fabric is a child resource of the Recovery Services Vault.",
+        "references": [
+          {
+            "title": "ASR replication fabrics Bicep reference",
+            "url": "https://learn.microsoft.com/azure/templates/microsoft.recoveryservices/vaults/replicationfabrics"
+          }
+        ]
+      },
+      {
+        "name": "asr-container-eastus",
+        "type": "Microsoft.RecoveryServices/vaults/replicationFabrics/replicationProtectionContainers",
+        "location": "westus",
+        "sku": "N/A",
+        "properties": {
+          "providerSpecificInput": [
+            {
+              "instanceType": "A2A"
+            }
+          ]
+        },
+        "reasoning": {
+          "whyChosen": "Protection container in the source fabric (East US). Groups replicated items from the source region.",
+          "alternativesConsidered": [],
+          "tradeoffs": "No alternatives — required ASR component."
+        },
+        "dependencies": ["asr-fabric-eastus"],
+        "dependencyReasoning": "Container is a child of the source replication fabric.",
+        "references": [
+          {
+            "title": "ASR protection containers reference",
+            "url": "https://learn.microsoft.com/azure/templates/microsoft.recoveryservices/vaults/replicationfabrics/replicationprotectioncontainers"
+          }
+        ]
+      },
+      {
+        "name": "asr-container-westus",
+        "type": "Microsoft.RecoveryServices/vaults/replicationFabrics/replicationProtectionContainers",
+        "location": "westus",
+        "sku": "N/A",
+        "properties": {
+          "providerSpecificInput": [
+            {
+              "instanceType": "A2A"
+            }
+          ]
+        },
+        "reasoning": {
+          "whyChosen": "Protection container in the target fabric (West US). Receives replicated items during failover.",
+          "alternativesConsidered": [],
+          "tradeoffs": "No alternatives — required ASR component."
+        },
+        "dependencies": ["asr-fabric-westus"],
+        "dependencyReasoning": "Container is a child of the target replication fabric.",
+        "references": [
+          {
+            "title": "ASR protection containers reference",
+            "url": "https://learn.microsoft.com/azure/templates/microsoft.recoveryservices/vaults/replicationfabrics/replicationprotectioncontainers"
+          }
+        ]
+      },
+      {
+        "name": "asr-mapping-eastus-to-westus",
+        "type": "Microsoft.RecoveryServices/vaults/replicationFabrics/replicationProtectionContainers/replicationProtectionContainerMappings",
+        "location": "westus",
+        "sku": "N/A",
+        "properties": {
+          "targetProtectionContainerRef": "asr-container-westus",
+          "policyRef": "asr-policy-prod-001",
+          "providerSpecificInput": {
+            "instanceType": "A2A"
+          }
+        },
+        "reasoning": {
+          "whyChosen": "Maps the source container (East US) to the target container (West US) using the replication policy. This is the forward replication path for failover.",
+          "alternativesConsidered": [],
+          "tradeoffs": "No alternatives — required ASR wiring."
+        },
+        "dependencies": ["asr-container-eastus", "asr-container-westus", "asr-policy-prod-001"],
+        "dependencyReasoning": "Mapping requires both containers and the replication policy to exist.",
+        "references": [
+          {
+            "title": "ASR container mappings reference",
+            "url": "https://learn.microsoft.com/azure/templates/microsoft.recoveryservices/vaults/replicationfabrics/replicationprotectioncontainers/replicationprotectioncontainermappings"
+          }
+        ]
+      },
+      {
+        "name": "asr-mapping-westus-to-eastus",
+        "type": "Microsoft.RecoveryServices/vaults/replicationFabrics/replicationProtectionContainers/replicationProtectionContainerMappings",
+        "location": "westus",
+        "sku": "N/A",
+        "properties": {
+          "targetProtectionContainerRef": "asr-container-eastus",
+          "policyRef": "asr-policy-prod-001",
+          "providerSpecificInput": {
+            "instanceType": "A2A"
+          }
+        },
+        "reasoning": {
+          "whyChosen": "Reverse mapping for failback from West US back to East US. Enables re-protection of VMs after failover so they can fail back to the primary region.",
+          "alternativesConsidered": [],
+          "tradeoffs": "No alternatives — required for automated failback."
+        },
+        "dependencies": ["asr-container-westus", "asr-container-eastus", "asr-policy-prod-001"],
+        "dependencyReasoning": "Reverse mapping requires both containers and the replication policy.",
+        "references": [
+          {
+            "title": "Re-protect and fail back Azure VMs",
+            "url": "https://learn.microsoft.com/azure/site-recovery/azure-to-azure-how-to-reprotect"
+          }
+        ]
+      },
+      {
+        "name": "contoso-dr.com",
+        "type": "Microsoft.Network/dnsZones",
+        "location": "global",
+        "sku": "N/A",
+        "properties": {
+          "zoneType": "Public"
+        },
+        "reasoning": {
+          "whyChosen": "Public DNS zone to manage A/CNAME records for the workload. During failover, the Automation runbook updates DNS records to point to the DR region's public IPs. During failback, records are reverted to the primary region.",
+          "alternativesConsidered": ["Azure Traffic Manager for automatic DNS failover", "Azure Front Door"],
+          "tradeoffs": "Manual DNS update via Automation runbook provides full control and lower cost. Traffic Manager would provide automatic health-probe-based failover but adds ongoing cost and complexity."
+        },
+        "dependencies": [],
+        "references": [
+          {
+            "title": "Azure DNS overview",
+            "url": "https://learn.microsoft.com/azure/dns/dns-overview"
+          }
+        ]
+      },
+      {
+        "name": "aa-dr-prod-westus-001",
+        "type": "Microsoft.Automation/automationAccounts",
+        "location": "westus",
+        "sku": "Basic",
+        "properties": {
+          "disableLocalAuth": false,
+          "publicNetworkAccess": true,
+          "identity": {
+            "type": "SystemAssigned"
+          }
+        },
+        "reasoning": {
+          "whyChosen": "Azure Automation Account hosts runbooks that automate DNS failback. System-assigned managed identity is used to authenticate against Azure DNS and Site Recovery APIs. Placed in DR region (West US) to remain operational during primary region outage.",
+          "alternativesConsidered": ["Azure Functions for automation", "Azure Logic Apps"],
+          "tradeoffs": "Automation Account integrates natively with ASR recovery plans via runbook scripts. Functions would require more custom code; Logic Apps would add visual workflow overhead."
+        },
+        "dependencies": [],
+        "references": [
+          {
+            "title": "Azure Automation overview",
+            "url": "https://learn.microsoft.com/azure/automation/overview"
+          },
+          {
+            "title": "ASR Automation Runbooks",
+            "url": "https://learn.microsoft.com/azure/site-recovery/site-recovery-runbook-automation"
+          }
+        ]
+      },
+      {
+        "name": "rb-dns-failback-prod-001",
+        "type": "Microsoft.Automation/automationAccounts/runbooks",
+        "location": "westus",
+        "sku": "N/A",
+        "properties": {
+          "runbookType": "PowerShell",
+          "description": "Runbook to update Azure DNS records during ASR failover and failback. On failover: updates A records to point to DR region public IPs. On failback: reverts A records to primary region IPs. Triggered by ASR recovery plan pre/post actions.",
+          "publishContentLink": {
+            "uri": "https://raw.githubusercontent.com/Azure/azure-quickstart-templates/master/demos/asr-automation-recovery/scripts/ASR-DNS-UpdateIP.ps1"
+          }
+        },
+        "reasoning": {
+          "whyChosen": "PowerShell runbook integrated with ASR recovery plans. Automatically updates DNS A records on failover/failback events. Uses the ASR quickstart template pattern for DNS IP updates.",
+          "alternativesConsidered": ["Custom Python runbook", "Webhook-triggered Azure Function"],
+          "tradeoffs": "PowerShell is the standard for ASR runbook integration; Python would work but has less ASR ecosystem support."
+        },
+        "dependencies": ["aa-dr-prod-westus-001", "contoso-dr.com"],
+        "dependencyReasoning": "Runbook is a child resource of the Automation Account and operates on the DNS zone.",
+        "references": [
+          {
+            "title": "Add Azure Automation runbooks to recovery plans",
+            "url": "https://learn.microsoft.com/azure/site-recovery/site-recovery-runbook-automation"
+          },
+          {
+            "title": "ASR Runbooks quickstart template",
+            "url": "https://github.com/Azure/azure-quickstart-templates/tree/master/demos/asr-automation-recovery"
+          }
+        ]
+      }
+    ],
+    "overallReasoning": {
+      "summary": "This architecture provisions a full Azure Site Recovery disaster recovery pipeline from East US (primary) to West US (DR). Two production VMs (web + app tier) in East US are replicated via ASR with a 5-minute RPO crash-consistent policy. The Recovery Services Vault and all ASR fabric/container/mapping resources are in West US. A mirrored VNet and NSG in West US are pre-provisioned to eliminate failover delays. An Azure Automation Account with a PowerShell runbook automates DNS record updates on both failover and failback, ensuring clients are redirected to the active region. Bi-directional container mappings enable full failback to East US after the primary region recovers.",
+      "tradeoffs": "This plan uses Automation runbooks for DNS failover rather than Azure Traffic Manager — this gives full control but requires the runbook to execute successfully. For higher automation, Traffic Manager with health probes could replace the DNS zone + runbook pattern. The plan provisions two D2s_v5 VMs as representative workloads; production may require additional VMs or different sizing. Cache storage uses LRS since it holds transient replication data only."
+    },
+    "validation": "All resources use consistent CAF naming. VNet CIDRs are non-overlapping (10.1.0.0/16 primary, 10.2.0.0/16 DR). NSG rules are mirrored across regions. ASR fabric-container-mapping chain is complete with forward (East→West) and reverse (West→East) paths. Cache storage uses Standard_LRS per ASR requirements. Automation runbook has system-assigned identity for DNS operations. All VM sizes (Standard_D2s_v5) support Premium_LRS disks and accelerated networking.",
+    "references": [
+      {
+        "title": "Azure to Azure disaster recovery architecture",
+        "url": "https://learn.microsoft.com/azure/site-recovery/azure-to-azure-architecture"
+      },
+      {
+        "title": "Set up disaster recovery for Azure VMs",
+        "url": "https://learn.microsoft.com/azure/site-recovery/azure-to-azure-tutorial-enable-replication"
+      },
+      {
+        "title": "Enable global disaster recovery with ASR",
+        "url": "https://learn.microsoft.com/azure/site-recovery/azure-to-azure-enable-global-disaster-recovery"
+      },
+      {
+        "title": "Add Automation runbooks to ASR recovery plans",
+        "url": "https://learn.microsoft.com/azure/site-recovery/site-recovery-runbook-automation"
+      },
+      {
+        "title": "Create Recovery Services Vault with Bicep",
+        "url": "https://learn.microsoft.com/azure/site-recovery/quickstart-create-vault-bicep"
+      }
+    ]
+  }
+}
