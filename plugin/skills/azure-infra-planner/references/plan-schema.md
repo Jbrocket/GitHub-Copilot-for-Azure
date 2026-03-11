@@ -25,7 +25,7 @@ The infrastructure plan is written to `<project-root>/.azure/infrastructure-plan
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `userGoal` | string | Yes | User's stated objective or workload description |
+| `userGoal` | string | Yes | User's stated objective or workload description, matches user query exactly |
 
 ## `plan` (required)
 

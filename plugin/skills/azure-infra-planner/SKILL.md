@@ -29,7 +29,7 @@ Activate this skill when user wants to:
 
 ## Rules
 
-1. **Research before planning** — Use MCP tools if necessary to research best practices for SKUs, regions, naming conventions, and architecture if you can't find them in your references.
+1. **Research before planning** — You **MUST** use available MCP tools to research best practices **AND** Well-Architected Framework for SKUs, regions, naming conventions, and architecture if you can't find them in your references. See [research.md](references/research.md) for detailed research instructions.
 2. **Plan before IaC** — Generate `<project-root>/.azure/infrastructure-plan.json` before any IaC so we can map the plan to generated code and ensure alignment.
 3. **Get approval** — Plan status must be `approved` before deployment.
 4. **User chooses IaC format** — Bicep or Terraform; ask if not specified.
@@ -53,7 +53,7 @@ Activate this skill when user wants to:
 
 | Phase | Action | References |
 |-------|--------|------------|
-| 1. Research | Gather requirements, check SKUs/regions, load per-resource files | [research.md](references/research.md), [resources.md](references/resources.md) |
+| 1. Research | Gather requirements, check SKUs/regions, load per-resource files, research WAF to see if any extra resources are necessary (monitoring, security) | [research.md](references/research.md), [resources.md](references/resources.md) |
 | 2. Plan Generation | Build `<project-root>/.azure/infrastructure-plan.json` one resource at a time. Verify each resource immediately. Present plan and **STOP HERE until user approves**. | [plan-schema.md](references/plan-schema.md), [verification.md](references/verification.md) |
 | 3. IaC Generation | Generate Bicep or Terraform from approved plan. **Create `<project-root>/infra/` directory first**, then write all `.bicep` or `.tf` files there. Never write IaC files to `.azure/` or project root. | [bicep-generation.md](references/DSLs/bicep/bicep-generation.md), [terraform-generation.md](references/DSLs/terraform/terraform-generation.md) |
 | 4. Deployment | Confirm subscription and resource group, then execute `az deployment group create` or `terraform apply` only when `meta.status === "approved"` | [deployment.md](references/deployment.md) |
