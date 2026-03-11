@@ -18,8 +18,16 @@ Determine the input scenario and gather requirements accordingly:
 
 Use `microsoft_docs_search` to find architecture guidance:
 - Search for architecture patterns matching the workload type (e.g., "Azure web app architecture best practices")
-- Search for Well-Architected Framework guidance for the relevant pillars
 - Extract recommended resource types and design patterns from results
+
+### Well-Architected Framework Guidance
+
+Call `wellarchitectedframework_serviceguide_get` for every planned Azure service early in research so WAF recommendations can influence architecture decisions.
+
+The tool returns a **raw markdown URL**, not content. Handle the two cases:
+
+1. **URL returned** — Spawn a sub-agent to fetch the markdown and summarize key principles using only the user's initial workload description (no other context, to prevent bias).
+2. **No guide available** — Fall back to `microsoft_docs_search` for WAF guidance.
 
 ### SKU and Region Availability
 
