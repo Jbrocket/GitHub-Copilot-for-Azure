@@ -25,7 +25,7 @@ The infrastructure plan is written to `<project-root>/.azure/infrastructure-plan
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `userGoal` | string | Yes | User's stated objective or workload description |
+| `userGoal` | string | Yes | User's stated objective or workload description, matches user query exactly |
 
 ## `plan` (required)
 
@@ -50,7 +50,7 @@ Each element represents one Azure resource:
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `whyChosen` | string | Justification referencing WAF pillars or requirements |
+| `whyChosen` | string | Justification referencing WAF pillars (see [research.md](research.md)) or requirements |
 | `alternativesConsidered` | string[] | Other options evaluated |
 | `tradeoffs` | string | Key tradeoffs in this choice |
 

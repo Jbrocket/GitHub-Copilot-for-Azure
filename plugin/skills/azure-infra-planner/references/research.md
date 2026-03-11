@@ -1,6 +1,6 @@
 # Research Phase
 
-Gather all information needed to make correct infrastructure decisions before generating the plan.
+Gather all information needed to make correct infrastructure decisions before generating the plan. 
 
 ## Input Analysis
 
@@ -18,39 +18,23 @@ Determine the input scenario and gather requirements accordingly:
 
 Use `microsoft_docs_search` to find architecture guidance:
 - Search for architecture patterns matching the workload type (e.g., "Azure web app architecture best practices")
-- Search for Well-Architected Framework guidance for the relevant pillars
 - Extract recommended resource types and design patterns from results
+
+### Well-Architected Framework Guidance
+
+**IMPORTANT** You **MUST** call `wellarchitectedframework_serviceguide_get` for every planned Azure service (if the service exists in the MCP) early in research so WAF recommendations can influence architecture decisions. These decisions include extra resources or properties needed for security, monitoring, and Single-Point-of-Failures. Use subagents to execute this research.
+
+The tool returns a **raw markdown URL**, not content. Handle the two cases:
+
+1. **URL returned** — Spawn a subagent to summarize the content found and ask it to summarize important information 500 tokens or less. It can summarize better the more specific information you're seeking (cost, security, important properties, key principles).
+2. **No guide available** — Fall back to `microsoft_docs_search` for WAF guidance. Use a subagent to summarize the content found and ask it to summarize important information 500 tokens or less. It can summarize better the more specific information you're seeking (cost, security, important properties).
 
 ### SKU and Region Availability
 
-Use `microsoft_docs_search` and `microsoft_docs_fetch` to verify:
+Use [resources](resources.md) and `microsoft_docs_search` and `microsoft_docs_fetch` if necessary to verify:
 - Which regions support the selected resource types
 - Available SKUs and their capabilities
 - Service limits and quotas for target SKUs
-
-### Resource Documentation
-
-For each planned resource type, use `microsoft_docs_fetch` on the relevant Learn doc pages to:
-- Confirm correct ARM resource type and API version
-- Verify required and optional properties
-- Check configuration constraints and incompatibilities
-- Populate the `references` array in the plan JSON with doc URLs
-
-### Search → Fetch Pattern
-
-1. **Search first** — Use `microsoft_docs_search` with a specific query to find relevant pages
-2. **Fetch high-value pages** — Use `microsoft_docs_fetch` on URLs from search results that need full detail
-3. **Record URLs** — Save fetched URLs in the resource's `references` array for verification traceability
-
-### Existing Resource Discovery
-
-When new resources need to connect to already-deployed infrastructure:
-
-1. **Identify subscription** — Use `mcp_azure_mcp_ser_subscription_list` to list subscriptions and confirm the target
-2. **List resource groups** — Use `mcp_azure_mcp_ser_group_list` to find existing groups in the subscription
-3. **Query deployed resources** — Use `azure_resources-query_azure_resource_graph` with a natural language intent (e.g., "list all resources in resource group X with their type, SKU, and location")
-4. **Extract connection points** — From the query results, identify resource names, SKUs, networking config, and other properties that new resources must align with
-5. **Add as dependencies** — Reference existing resources in the plan's `dependencies` arrays so the generated IaC can wire up correctly
 
 ## Research Checklist
 
