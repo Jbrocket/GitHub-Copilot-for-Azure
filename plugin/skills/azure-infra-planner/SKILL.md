@@ -86,4 +86,5 @@ Activate this skill when user wants to:
 | Tool | Purpose |
 |------|---------|
 | `microsoft_docs_search` | Search Microsoft Learn for architecture patterns, SKU details, naming rules, and best practices. |
-| `microsoft_docs_fetch` | Fetch full content of a specific Learn doc page by URL.
+| `microsoft_docs_fetch` | Fetch full content of a specific Learn doc page by URL. |
+| `wellarchitectedframework_serviceguide_get` | Get a WAF service guide URL for an Azure service. Returns a raw markdown URL — use a sub-agent to fetch and summarize the guide using only the user's initial prompt (see [research.md](references/research.md)). Falls back to `microsoft_docs_search` if no guide exists. |
