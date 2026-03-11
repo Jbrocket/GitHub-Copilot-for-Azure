@@ -26,12 +26,12 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const SKILL_NAME = "azure-infra-planner";
-const GOLDEN_DATASET_PATH = path.join(__dirname, "evals", "golden_dataset.txt");
+const GOLDEN_DATASET_PATH = path.join(__dirname, "golden_dataset_top_10.txt");
 const REPO_ROOT = path.resolve(__dirname, "../..");
 const ARTIFACTS_DIR = path.join(REPO_ROOT, process.env.EVAL_ARTIFACT_DIR || "artifacts");
 const PLAN_EVAL_SKILL_DIR = path.join(REPO_ROOT, ".github", "skills", "plan-eval");
 const FOLLOW_UP_PROMPT = ["Go with recommended options. Assume all defaults to make the plan."];
-const GOLDEN_PROMPT_COUNT = 3;
+const GOLDEN_PROMPT_COUNT = 10;
 
 /** Models to evaluate. Override with EVAL_MODELS env var (comma-separated). */
 const EVAL_MODELS: string[] = process.env.EVAL_MODELS

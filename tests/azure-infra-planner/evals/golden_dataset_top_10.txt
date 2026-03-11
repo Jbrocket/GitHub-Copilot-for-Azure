@@ -1,0 +1,11 @@
+prompt	completed
+Create a real-time document Q&A API leveraging Azure OpenAI and Azure Cosmos DB, expose endpoints using Azure API Management, and enforce rate limits per user.	
+Deploy a microservices-based e-commerce backend with independent catalog, order, and payment services, use AKS with Helm for deployments, and implement service mesh for traffic control.	
+Provision an event-driven data processing pipeline using ACA with Pub/Sub integration, connect to Azure Event Grid, and output results to Cosmos DB.	
+Configure an autoscaled VMSS-based presentation tier, application servers in separate subnet, and encrypted SQL Managed Instance as the backend database.	
+Launch a cloud-based webhook-driven PDF converter using Azure Functions, persist job metadata in Cosmos DB, and use Azure Key Vault for secrets.	
+Launch a data ingestion pipeline using Azure Data Factory for importing sales data daily, transform using Azure Databricks, and store results in Azure Synapse Analytics.	
+Build a secure ML training pipeline with data stored in Azure Data Lake, enable audit logging for all training jobs, and encrypt all outputs.	
+Deploy a real-time recommendation engine as an Azure ML managed online endpoint, scale for high request volumes, and store usage activity in Cosmos DB.	
+Configure a site recovery plan for disaster failover from East to West Azure region, replicate major VM workloads, and automate DNS failbacks.	
+Create an Azure IoT Hub edge deployment with AI module for anomaly detection, output events to Cosmos DB, and send SMS alerts via Logic Apps.	
