@@ -4,12 +4,17 @@ skill: azure-infra-planner
 version: "1.0"
 config:
   trials_per_task: 1
-  timeout_seconds: 600
+  timeout_seconds: 300
   parallel: false
   executor: copilot-sdk
   model: claude-opus-4.6
   skill_directories:
     - "../../../plugin/skills/azure-infra-planner"
+  mcp_servers:
+    azure:
+      type: stdio
+      command: npx
+      args: ["-y", "@azure/mcp@latest", "server", "start"]
 graders:
   - type: text
     name: no_fatal_errors

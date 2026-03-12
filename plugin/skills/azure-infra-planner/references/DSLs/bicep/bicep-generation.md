@@ -4,11 +4,6 @@ Generate Bicep IaC files from the approved infrastructure plan.
 
 > ⚠️ **CRITICAL**: All Bicep files MUST be created under `<project-root>/infra/`. Never place `.bicep` files in the project root or in `.azure/`.
 
-## MCP Tools
-
-- Use `mcp_azure_mcp_bicepschema` to retrieve accurate resource schemas and property definitions
-- Use `mcp_azure_mcp_deploy` with `iac rules get` to apply IaC best practices
-
 ## File Structure
 
 Generate files under `<project-root>/infra/`:
@@ -28,11 +23,9 @@ infra/
 
 1. **Create `infra/` directory** — Create `<project-root>/infra/` and `<project-root>/infra/modules/` directories. All files in subsequent steps go here.
 2. **Read plan** — Load `<project-root>/.azure/infrastructure-plan.json`, verify `meta.status === "approved"`
-3. **Look up schemas** — For each resource `type`, call `mcp_azure_mcp_bicepschema` to get the correct API version and required properties
-4. **Generate modules** — Group resources by category; one `.bicep` file per group under `infra/modules/`
-5. **Generate main.bicep** — Write `infra/main.bicep` that imports all modules and passes parameters
-6. **Generate parameters** — Create `infra/main.bicepparam` with environment-specific values
-7. **Apply best practices** — Call `mcp_azure_mcp_deploy` `iac rules get` and verify compliance
+3. **Generate modules** — Group resources by category; one `.bicep` file per group under `infra/modules/`
+4. **Generate main.bicep** — Write `infra/main.bicep` that imports all modules and passes parameters
+5. **Generate parameters** — Create `infra/main.bicepparam` with environment-specific values
 
 ## Bicep Conventions
 
