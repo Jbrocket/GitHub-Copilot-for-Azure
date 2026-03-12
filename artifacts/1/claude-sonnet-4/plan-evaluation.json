@@ -1,0 +1,29 @@
+{
+  "overallScore": 0.88,
+  "dimensions": {
+    "goalAlignment": 0.95,
+    "wafConformance": 0.7,
+    "dependencyCompleteness": 0.95,
+    "deploymentViability": 0.9
+  },
+  "risks": [
+    "API Management Developer tier has no SLA and is not suitable for production workloads — only supports a single unit with no availability zone or multi-region support",
+    "Key Vault purge protection is disabled (enablePurgeProtection: false), contradicting CIS Azure Foundations Benchmark and Azure security best practices which recommend enabling it to prevent permanent data loss",
+    "No managed identity configuration for the App Service — best practices strongly recommend managed identities over key-based authentication for accessing Key Vault, Cosmos DB, OpenAI, and Storage",
+    "All resources have publicNetworkAccess set to Enabled with no VNet integration or private endpoints, increasing attack surface",
+    "No Application Insights or Log Analytics workspace included — centralized monitoring and observability infrastructure is missing",
+    "Cosmos DB has enableAutomaticFailover set to false and no geo-redundancy, creating a single point of failure",
+    "Storage account uses Standard_LRS with no geo-redundancy — documents cannot be recovered from a regional outage"
+  ],
+  "correctionsRecommended": [
+    "Add an Application Insights resource and Log Analytics workspace for centralized monitoring, and connect them to the App Service and APIM",
+    "Configure a system-assigned managed identity on the App Service and use it to authenticate to Key Vault, Cosmos DB, OpenAI, and Storage instead of key-based auth",
+    "Enable purge protection on the Key Vault (enablePurgeProtection: true) to comply with CIS benchmarks and prevent accidental or malicious permanent deletion",
+    "Upgrade API Management from Developer to Standard v2 or Premium v2 tier for production SLA, scaling, and network isolation capabilities",
+    "Add VNet integration for the App Service and configure private endpoints for Key Vault, Cosmos DB, OpenAI, and Storage to restrict public network access",
+    "Enable automatic failover on Cosmos DB (enableAutomaticFailover: true) for improved reliability",
+    "Consider upgrading Storage redundancy from Standard_LRS to Standard_GRS or Standard_ZRS for geo- or zone-redundant document protection"
+  ],
+  "hardDependencies": [],
+  "deployable": 1
+}

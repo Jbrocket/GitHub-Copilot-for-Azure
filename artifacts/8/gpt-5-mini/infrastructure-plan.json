@@ -1,0 +1,32 @@
+{
+  "location": "eastus",
+  "resources": {
+    "mlWorkspace": {
+      "name": "ml-workspace-default",
+      "sku": "Basic",
+      "compute": {
+        "defaultInferenceSku": "Standard_DS3_v2",
+        "minInstances": 1,
+        "maxInstances": 10,
+        "autoscaleTargetUtilization": 0.7
+      }
+    },
+    "cosmosDb": {
+      "name": "rec-cosmosdb",
+      "api": "Sql",
+      "consistencyPolicy": "Session",
+      "throughput": "Autoscale"
+    },
+    "keyVault": {
+      "name": "rec-keyvault"
+    }
+  },
+  "network": {
+    "usePrivateEndpoints": false
+  },
+  "assumptions": [
+    "Managed Identity for service-to-service access",
+    "Secrets stored in Key Vault",
+    "Defaults used for locations and SKUs unless specified"
+  ]
+}

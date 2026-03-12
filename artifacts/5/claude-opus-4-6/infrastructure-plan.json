@@ -1,0 +1,287 @@
+{
+  "meta": {
+    "planId": "plan-pdf-converter-001",
+    "generatedAt": "2026-03-11T12:49:24.634Z",
+    "version": "0.1-draft",
+    "status": "draft"
+  },
+  "inputs": {
+    "userGoal": "Launch a cloud-based webhook-driven PDF converter using Azure Functions, persist job metadata in Cosmos DB, and use Azure Key Vault for secrets."
+  },
+  "plan": {
+    "architecturePrinciples": [
+      "Serverless-first to minimise operational overhead",
+      "Secure secrets management via Key Vault with RBAC",
+      "Observability through Application Insights and Log Analytics",
+      "Managed identity for passwordless inter-service auth"
+    ],
+    "resources": [
+      {
+        "name": "log-pdfconverter-prod-001",
+        "type": "Microsoft.OperationalInsights/workspaces",
+        "location": "eastus",
+        "sku": "PerGB2018",
+        "properties": {
+          "retentionInDays": 30
+        },
+        "reasoning": {
+          "whyChosen": "Workspace-based Application Insights requires a Log Analytics workspace. PerGB2018 is the recommended pay-as-you-go SKU for new deployments.",
+          "alternativesConsidered": ["Free tier (500 MB/day limit, 7-day retention)"],
+          "tradeoffs": "Pay-as-you-go cost vs operational visibility; 30-day retention keeps costs low."
+        },
+        "dependencies": [],
+        "references": [
+          {
+            "title": "Log Analytics overview",
+            "url": "https://learn.microsoft.com/azure/azure-monitor/logs/log-analytics-overview"
+          }
+        ]
+      },
+      {
+        "name": "appi-pdfconverter-prod-001",
+        "type": "Microsoft.Insights/components",
+        "subtype": "web",
+        "location": "eastus",
+        "sku": "Workspace-based (no SKU block)",
+        "properties": {
+          "Application_Type": "web",
+          "WorkspaceResourceId": "[resourceId('Microsoft.OperationalInsights/workspaces', 'log-pdfconverter-prod-001')]",
+          "RetentionInDays": 90
+        },
+        "reasoning": {
+          "whyChosen": "Provides request tracing, failure diagnostics, and performance monitoring for the Function App. Workspace-based mode is the modern standard.",
+          "alternativesConsidered": ["Classic Application Insights (deprecated)"],
+          "tradeoffs": "Adds ingestion cost but critical for production observability."
+        },
+        "dependencies": ["log-pdfconverter-prod-001"],
+        "dependencyReasoning": "Workspace-based Application Insights must link to a Log Analytics workspace.",
+        "references": [
+          {
+            "title": "Application Insights overview",
+            "url": "https://learn.microsoft.com/azure/azure-monitor/app/app-insights-overview"
+          }
+        ]
+      },
+      {
+        "name": "id-pdfconverter-prod-001",
+        "type": "Microsoft.ManagedIdentity/userAssignedIdentities",
+        "location": "eastus",
+        "sku": "N/A",
+        "properties": {},
+        "reasoning": {
+          "whyChosen": "User-assigned managed identity enables passwordless authentication from the Function App to Cosmos DB and Key Vault. Preferred over system-assigned for portability across deployment slots.",
+          "alternativesConsidered": ["System-assigned managed identity"],
+          "tradeoffs": "Slightly more setup but allows identity reuse and slot-safe deployments."
+        },
+        "dependencies": [],
+        "references": [
+          {
+            "title": "Managed identities overview",
+            "url": "https://learn.microsoft.com/entra/identity/managed-identities-azure-resources/overview"
+          }
+        ]
+      },
+      {
+        "name": "kv-pdfconverter-prod-001",
+        "type": "Microsoft.KeyVault/vaults",
+        "location": "eastus",
+        "sku": "standard",
+        "properties": {
+          "sku": {
+            "family": "A",
+            "name": "standard"
+          },
+          "tenantId": "[subscription().tenantId]",
+          "enableSoftDelete": true,
+          "softDeleteRetentionInDays": 90,
+          "enablePurgeProtection": true,
+          "enableRbacAuthorization": true,
+          "publicNetworkAccess": "Enabled"
+        },
+        "reasoning": {
+          "whyChosen": "Centralized secrets management for API keys, connection strings, and third-party credentials. RBAC authorization is the modern best practice over access policies.",
+          "alternativesConsidered": ["App settings with plain-text secrets", "Azure App Configuration"],
+          "tradeoffs": "Standard SKU is sufficient (no HSM keys needed). RBAC simplifies access control."
+        },
+        "dependencies": ["id-pdfconverter-prod-001"],
+        "dependencyReasoning": "The managed identity needs to exist before Key Vault RBAC role assignments can reference it.",
+        "references": [
+          {
+            "title": "Key Vault overview",
+            "url": "https://learn.microsoft.com/azure/key-vault/general/overview"
+          },
+          {
+            "title": "Key Vault RBAC",
+            "url": "https://learn.microsoft.com/azure/key-vault/general/rbac-guide"
+          }
+        ]
+      },
+      {
+        "name": "cosmos-pdfconverter-prod-001",
+        "type": "Microsoft.DocumentDB/databaseAccounts",
+        "subtype": "GlobalDocumentDB",
+        "location": "eastus",
+        "sku": "Standard (databaseAccountOfferType)",
+        "properties": {
+          "databaseAccountOfferType": "Standard",
+          "consistencyPolicy": {
+            "defaultConsistencyLevel": "Session"
+          },
+          "capabilities": [
+            { "name": "EnableServerless" }
+          ],
+          "locations": [
+            {
+              "locationName": "eastus",
+              "failoverPriority": 0
+            }
+          ],
+          "publicNetworkAccess": "Enabled"
+        },
+        "reasoning": {
+          "whyChosen": "Serverless Cosmos DB with NoSQL API is ideal for bursty webhook-driven workloads with unpredictable traffic. Session consistency balances correctness and performance. Job metadata is a natural fit for a document store.",
+          "alternativesConsidered": ["Azure SQL Database", "Azure Table Storage", "Cosmos DB provisioned throughput"],
+          "tradeoffs": "Serverless is single-region only and cannot use shared throughput databases, but avoids idle-cost and auto-scales with demand. Suitable for workloads under ~5,000 RU/s peak."
+        },
+        "dependencies": ["id-pdfconverter-prod-001"],
+        "dependencyReasoning": "Managed identity is needed for data-plane RBAC access from the Function App.",
+        "references": [
+          {
+            "title": "Cosmos DB overview",
+            "url": "https://learn.microsoft.com/azure/cosmos-db/introduction"
+          },
+          {
+            "title": "Cosmos DB serverless",
+            "url": "https://learn.microsoft.com/azure/cosmos-db/serverless"
+          }
+        ]
+      },
+      {
+        "name": "stpdfconverterprod001",
+        "type": "Microsoft.Storage/storageAccounts",
+        "subtype": "StorageV2",
+        "location": "eastus",
+        "sku": "Standard_LRS",
+        "properties": {
+          "kind": "StorageV2",
+          "accessTier": "Hot",
+          "supportsHttpsTrafficOnly": true,
+          "minimumTlsVersion": "TLS1_2",
+          "allowBlobPublicAccess": false
+        },
+        "reasoning": {
+          "whyChosen": "Required backing storage for Azure Functions (internal state, triggers, logging). StorageV2 is mandated by the Functions pairing constraint (needs Queue + Table). Also serves as blob storage for uploaded source files and converted PDFs.",
+          "alternativesConsidered": ["Separate storage accounts for Functions vs blobs"],
+          "tradeoffs": "Single storage account is simpler; separate accounts could isolate blast radius. LRS is cost-effective for non-critical PDF files."
+        },
+        "dependencies": [],
+        "references": [
+          {
+            "title": "Storage account overview",
+            "url": "https://learn.microsoft.com/azure/storage/common/storage-account-overview"
+          },
+          {
+            "title": "Functions storage requirements",
+            "url": "https://learn.microsoft.com/azure/azure-functions/storage-considerations"
+          }
+        ]
+      },
+      {
+        "name": "asp-pdfconverter-prod-001",
+        "type": "Microsoft.Web/serverfarms",
+        "location": "eastus",
+        "sku": "Y1",
+        "properties": {
+          "sku": {
+            "name": "Y1",
+            "tier": "Dynamic"
+          },
+          "kind": "functionapp",
+          "reserved": false
+        },
+        "reasoning": {
+          "whyChosen": "Consumption plan (Y1) provides pay-per-execution pricing and automatic scaling, ideal for webhook-driven workloads with idle periods.",
+          "alternativesConsidered": ["Flex Consumption (FC1)", "Premium (EP1)"],
+          "tradeoffs": "Consumption has a 5-minute default timeout (max 10 min) and cold-start latency. If PDF conversion routinely exceeds 5 min, upgrade to Premium. No VNet integration on Consumption."
+        },
+        "dependencies": [],
+        "references": [
+          {
+            "title": "Functions hosting plans",
+            "url": "https://learn.microsoft.com/azure/azure-functions/functions-scale"
+          }
+        ]
+      },
+      {
+        "name": "func-pdfconverter-prod-001",
+        "type": "Microsoft.Web/sites",
+        "subtype": "Azure Function",
+        "location": "eastus",
+        "sku": "Consumption (inherited from App Service Plan Y1)",
+        "properties": {
+          "kind": "functionapp",
+          "serverFarmId": "[resourceId('Microsoft.Web/serverfarms', 'asp-pdfconverter-prod-001')]",
+          "httpsOnly": true,
+          "siteConfig": {
+            "appSettings": [
+              { "name": "AzureWebJobsStorage", "value": "[connectionString of stpdfconverterprod001]" },
+              { "name": "FUNCTIONS_EXTENSION_VERSION", "value": "~4" },
+              { "name": "FUNCTIONS_WORKER_RUNTIME", "value": "node" },
+              { "name": "APPLICATIONINSIGHTS_CONNECTION_STRING", "value": "[reference appi-pdfconverter-prod-001]" },
+              { "name": "CosmosDbEndpoint", "value": "@Microsoft.KeyVault(SecretUri=https://kv-pdfconverter-prod-001.vault.azure.net/secrets/CosmosDbEndpoint)" }
+            ]
+          },
+          "identity": {
+            "type": "UserAssigned",
+            "userAssignedIdentities": {
+              "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', 'id-pdfconverter-prod-001')]": {}
+            }
+          }
+        },
+        "reasoning": {
+          "whyChosen": "HTTP-triggered Azure Function serves as the webhook endpoint for PDF conversion requests. Serverless model matches the event-driven pattern. Key Vault references in app settings keep secrets out of config.",
+          "alternativesConsidered": ["Azure Container Apps", "App Service Web App"],
+          "tradeoffs": "Functions are simpler for single-purpose webhook workloads. Container Apps would be better for long-running or multi-container workloads."
+        },
+        "dependencies": [
+          "asp-pdfconverter-prod-001",
+          "stpdfconverterprod001",
+          "appi-pdfconverter-prod-001",
+          "kv-pdfconverter-prod-001",
+          "cosmos-pdfconverter-prod-001",
+          "id-pdfconverter-prod-001"
+        ],
+        "dependencyReasoning": "Function App references the App Service Plan, Storage Account, Application Insights, Key Vault (via secret refs), Cosmos DB (data store), and the managed identity for passwordless auth.",
+        "references": [
+          {
+            "title": "Azure Functions overview",
+            "url": "https://learn.microsoft.com/azure/azure-functions/functions-overview"
+          },
+          {
+            "title": "Key Vault references in Functions",
+            "url": "https://learn.microsoft.com/azure/app-service/app-service-key-vault-references"
+          }
+        ]
+      }
+    ],
+    "overallReasoning": {
+      "summary": "This architecture uses a fully serverless approach: Azure Functions (Consumption plan) receives webhook HTTP triggers, converts documents to PDF, and persists job metadata in Cosmos DB (Serverless, NoSQL API). Secrets are stored in Key Vault and accessed via Key Vault references in app settings. A user-assigned managed identity provides passwordless auth across all services. Application Insights with a Log Analytics workspace delivers end-to-end observability.",
+      "tradeoffs": "Consumption plan has cold-start latency and a 5–10 minute execution timeout — if PDF conversions are CPU-intensive or long-running, consider upgrading to Premium (EP1). Cosmos DB Serverless is single-region only; for multi-region HA, switch to provisioned throughput. No VNet isolation in this baseline design — add VNet integration with Premium Functions and private endpoints for enterprise security."
+    },
+    "validation": "All resources are in eastus. Function App storage uses StorageV2 (satisfies Queue+Table requirement). Consumption plan does not reference VNet-secured storage. Cosmos DB Serverless is single-region with Session consistency (valid pairing). Key Vault has soft-delete and purge protection enabled. RBAC authorization is used consistently. Application Insights is workspace-based with Log Analytics.",
+    "references": [
+      {
+        "title": "Serverless web application on Azure",
+        "url": "https://learn.microsoft.com/azure/architecture/web-apps/serverless/architectures/web-app"
+      },
+      {
+        "title": "Azure Functions best practices",
+        "url": "https://learn.microsoft.com/azure/azure-functions/functions-best-practices"
+      },
+      {
+        "title": "Cloud Adoption Framework naming conventions",
+        "url": "https://learn.microsoft.com/azure/cloud-adoption-framework/ready/azure-best-practices/resource-naming"
+      }
+    ]
+  }
+}

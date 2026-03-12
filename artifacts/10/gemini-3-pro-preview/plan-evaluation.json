@@ -1,0 +1,29 @@
+{
+  "overallScore": 0.75,
+  "dimensions": {
+    "goalAlignment": 0.82,
+    "wafConformance": 0.55,
+    "dependencyCompleteness": 0.8,
+    "deploymentViability": 0.85
+  },
+  "risks": [
+    "No zone redundancy or multi-region failover configured for any resource; single-region deployment in eastus creates a single point of failure",
+    "No private endpoints or network isolation for IoT Hub or Cosmos DB, leaving resources accessible over the public internet",
+    "No managed identity configured; resources may default to key-based authentication, increasing credential exposure risk",
+    "No monitoring or diagnostics resources (Log Analytics, Application Insights) included in the plan",
+    "Stream Analytics compatibilityLevel is 1.0; version 1.2 is current and recommended for latest features and fixes",
+    "Logic App references a Twilio API connection via $connections parameter but no API connection resource is defined in the plan"
+  ],
+  "correctionsRecommended": [
+    "Enable zone redundancy on Cosmos DB by setting isZoneRedundant to true in the locations array",
+    "Add private endpoints for IoT Hub and Cosmos DB to restrict public network access",
+    "Configure managed identity on Stream Analytics and Logic App for secure, keyless authentication to IoT Hub and Cosmos DB",
+    "Add a Log Analytics workspace resource and configure diagnostic settings on all resources for monitoring and alerting",
+    "Upgrade Stream Analytics compatibilityLevel from 1.0 to 1.2",
+    "Define the Twilio API connection as an explicit Microsoft.Web/connections resource, or replace with Azure Communication Services for native SMS",
+    "Add resource tags across all resources for cost tracking and operational management",
+    "Disable key-based access on Cosmos DB and use Azure RBAC for data-plane access"
+  ],
+  "hardDependencies": [],
+  "deployable": 1
+}

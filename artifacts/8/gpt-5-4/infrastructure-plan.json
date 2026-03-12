@@ -1,0 +1,356 @@
+{
+  "meta": {
+    "planId": "plan-recomendation-engine-001",
+    "generatedAt": "2026-03-11T12:56:48.880Z",
+    "version": "0.1-draft",
+    "status": "draft"
+  },
+  "inputs": {
+    "userGoal": "Deploy a real-time recommendation engine as an Azure ML managed online endpoint, scale for high request volumes, and store usage activity in Cosmos DB."
+  },
+  "plan": {
+    "architecturePrinciples": [
+      "Scalable — autoscaling online endpoint and serverless-friendly Cosmos DB",
+      "Observable — centralized logging and monitoring via Log Analytics and Application Insights",
+      "Secure — Key Vault for secrets, system-assigned managed identities, RBAC authorization",
+      "Cost-efficient — pay-per-use Cosmos DB autoscale, right-sized ML compute"
+    ],
+    "resources": [
+      {
+        "name": "log-recommend-prod-001",
+        "type": "Microsoft.OperationalInsights/workspaces",
+        "location": "eastus",
+        "sku": "PerGB2018",
+        "properties": {
+          "retentionInDays": 30
+        },
+        "reasoning": {
+          "whyChosen": "Required backing store for workspace-based Application Insights. PerGB2018 is the recommended default SKU for new deployments.",
+          "alternativesConsidered": [
+            "Free tier (500 MB/day cap too low for production)"
+          ],
+          "tradeoffs": "Pay-as-you-go pricing; costs scale with log volume."
+        },
+        "dependencies": [],
+        "references": [
+          {
+            "title": "Log Analytics overview",
+            "url": "https://learn.microsoft.com/azure/azure-monitor/logs/log-analytics-overview"
+          }
+        ]
+      },
+      {
+        "name": "appi-recommend-prod-001",
+        "type": "Microsoft.Insights/components",
+        "subtype": "web",
+        "location": "eastus",
+        "sku": "N/A (priced via Log Analytics)",
+        "properties": {
+          "Application_Type": "web",
+          "WorkspaceResourceId": "[resourceId('Microsoft.OperationalInsights/workspaces', 'log-recommend-prod-001')]"
+        },
+        "reasoning": {
+          "whyChosen": "Workspace-based Application Insights is required by the ML workspace for monitoring online endpoint latency, throughput, and errors.",
+          "alternativesConsidered": [
+            "Classic Application Insights (deprecated)"
+          ],
+          "tradeoffs": "Workspace-based mode routes telemetry through Log Analytics; slightly more complex but enables advanced KQL queries."
+        },
+        "dependencies": [
+          "log-recommend-prod-001"
+        ],
+        "dependencyReasoning": "Application Insights must reference a Log Analytics workspace.",
+        "references": [
+          {
+            "title": "Workspace-based App Insights",
+            "url": "https://learn.microsoft.com/azure/azure-monitor/app/convert-classic-resource"
+          }
+        ]
+      },
+      {
+        "name": "kv-recommend-prod-001",
+        "type": "Microsoft.KeyVault/vaults",
+        "location": "eastus",
+        "sku": "standard",
+        "properties": {
+          "enableSoftDelete": true,
+          "enablePurgeProtection": true,
+          "enableRbacAuthorization": true,
+          "softDeleteRetentionInDays": 90
+        },
+        "reasoning": {
+          "whyChosen": "Required dependency for Azure ML workspace to store secrets such as connection strings and service principals. RBAC authorization preferred over access policies.",
+          "alternativesConsidered": [
+            "Premium SKU (HSM keys not needed for this workload)"
+          ],
+          "tradeoffs": "Standard tier is sufficient; no HSM-backed keys required."
+        },
+        "dependencies": [],
+        "references": [
+          {
+            "title": "Key Vault overview",
+            "url": "https://learn.microsoft.com/azure/key-vault/general/overview"
+          }
+        ]
+      },
+      {
+        "name": "strecommendprod001",
+        "type": "Microsoft.Storage/storageAccounts",
+        "subtype": "StorageV2",
+        "location": "eastus",
+        "sku": "Standard_LRS",
+        "properties": {
+          "kind": "StorageV2",
+          "accessTier": "Hot",
+          "supportsHttpsTrafficOnly": true,
+          "minimumTlsVersion": "TLS1_2",
+          "allowBlobPublicAccess": false
+        },
+        "reasoning": {
+          "whyChosen": "Required backing store for Azure ML workspace — stores experiment data, model artifacts, and logs. StorageV2 with Standard_LRS is the recommended default for ML workspaces.",
+          "alternativesConsidered": [
+            "Standard_GRS (higher cost for geo-redundancy not needed for artifacts)",
+            "Standard_ZRS (zone redundancy for higher availability)"
+          ],
+          "tradeoffs": "LRS is cost-effective; single-region only, acceptable for ML experiment data."
+        },
+        "dependencies": [],
+        "references": [
+          {
+            "title": "Storage account overview",
+            "url": "https://learn.microsoft.com/azure/storage/common/storage-account-overview"
+          }
+        ]
+      },
+      {
+        "name": "crrecommendprod001",
+        "type": "Microsoft.ContainerRegistry/registries",
+        "location": "eastus",
+        "sku": "Basic",
+        "properties": {
+          "adminUserEnabled": false
+        },
+        "reasoning": {
+          "whyChosen": "Container Registry stores Docker images for the recommendation model served by the managed online endpoint. Basic tier is sufficient for a single-region production workload.",
+          "alternativesConsidered": [
+            "Standard (more storage, not needed initially)",
+            "Premium (geo-replication, private link — overkill for single-region)"
+          ],
+          "tradeoffs": "Basic limits: 10 GiB storage, no geo-replication or private link. Upgrade to Standard/Premium if storage or security needs grow."
+        },
+        "dependencies": [],
+        "references": [
+          {
+            "title": "ACR SKU tiers",
+            "url": "https://learn.microsoft.com/azure/container-registry/container-registry-skus"
+          }
+        ]
+      },
+      {
+        "name": "mlw-recommend-prod-001",
+        "type": "Microsoft.MachineLearningServices/workspaces",
+        "location": "eastus",
+        "sku": "Basic",
+        "properties": {
+          "identity": {
+            "type": "SystemAssigned"
+          },
+          "storageAccount": "[resourceId('Microsoft.Storage/storageAccounts', 'strecommendprod001')]",
+          "keyVault": "[resourceId('Microsoft.KeyVault/vaults', 'kv-recommend-prod-001')]",
+          "applicationInsights": "[resourceId('Microsoft.Insights/components', 'appi-recommend-prod-001')]",
+          "containerRegistry": "[resourceId('Microsoft.ContainerRegistry/registries', 'crrecommendprod001')]"
+        },
+        "reasoning": {
+          "whyChosen": "Azure ML workspace is the control plane for managed online endpoints. Provides built-in autoscaling, blue/green deployments, and model management for the recommendation engine.",
+          "alternativesConsidered": [
+            "Azure Container Apps (less ML-native, no built-in model registry)",
+            "AKS with Triton Inference Server (more operational overhead)"
+          ],
+          "tradeoffs": "Managed online endpoints abstract infrastructure management but are limited to ML-focused workloads. Good fit for model inference."
+        },
+        "dependencies": [
+          "strecommendprod001",
+          "kv-recommend-prod-001",
+          "appi-recommend-prod-001",
+          "crrecommendprod001"
+        ],
+        "dependencyReasoning": "ML workspace requires linked Storage Account, Key Vault, App Insights, and optionally Container Registry (recommended for custom images).",
+        "references": [
+          {
+            "title": "Azure ML workspace overview",
+            "url": "https://learn.microsoft.com/azure/templates/microsoft.machinelearningservices/workspaces?pivots=deployment-language-bicep"
+          },
+          {
+            "title": "Managed online endpoints",
+            "url": "https://learn.microsoft.com/azure/machine-learning/concept-endpoints-online"
+          }
+        ]
+      },
+      {
+        "name": "recommend-endpoint",
+        "type": "Microsoft.MachineLearningServices/workspaces/onlineEndpoints",
+        "location": "eastus",
+        "sku": "N/A (compute-based billing)",
+        "properties": {
+          "authMode": "Key",
+          "description": "Real-time recommendation engine managed online endpoint"
+        },
+        "reasoning": {
+          "whyChosen": "Managed online endpoints provide built-in autoscaling, load balancing, and blue/green deployment support — ideal for high-volume real-time inference. Scaling is configured per deployment (instance type and count).",
+          "alternativesConsidered": [
+            "Kubernetes online endpoint (more control, more operational burden)",
+            "Batch endpoint (not suitable for real-time requests)"
+          ],
+          "tradeoffs": "Managed endpoints abstract compute management. Scaling is per-deployment (e.g., Standard_DS3_v2 instances, min 2 / max 10). Instance type chosen at deployment time, not in infrastructure plan."
+        },
+        "dependencies": [
+          "mlw-recommend-prod-001"
+        ],
+        "dependencyReasoning": "Online endpoint is a child resource of the ML workspace.",
+        "references": [
+          {
+            "title": "Deploy models with managed online endpoints",
+            "url": "https://learn.microsoft.com/azure/machine-learning/how-to-deploy-managed-online-endpoints"
+          },
+          {
+            "title": "Autoscale managed online endpoints",
+            "url": "https://learn.microsoft.com/azure/machine-learning/how-to-autoscale-endpoints"
+          }
+        ]
+      },
+      {
+        "name": "cosmos-recommend-prod-001",
+        "type": "Microsoft.DocumentDB/databaseAccounts",
+        "subtype": "GlobalDocumentDB",
+        "location": "eastus",
+        "sku": "Standard (databaseAccountOfferType)",
+        "properties": {
+          "databaseAccountOfferType": "Standard",
+          "consistencyPolicy": {
+            "defaultConsistencyLevel": "Session"
+          },
+          "locations": [
+            {
+              "locationName": "eastus",
+              "failoverPriority": 0,
+              "isZoneRedundant": false
+            }
+          ],
+          "enableAutomaticFailover": true,
+          "enableMultipleWriteLocations": false,
+          "enableFreeTier": false,
+          "publicNetworkAccess": "Enabled"
+        },
+        "reasoning": {
+          "whyChosen": "Cosmos DB NoSQL API offers single-digit millisecond reads/writes, ideal for high-volume usage activity logging. Session consistency balances performance and read-your-writes guarantee. Autoscale throughput handles traffic spikes.",
+          "alternativesConsidered": [
+            "Azure Table Storage (lower cost but limited query capabilities)",
+            "Azure SQL Database (relational overhead not needed for activity logs)",
+            "Event Hubs + downstream store (adds complexity for simple activity capture)"
+          ],
+          "tradeoffs": "Higher cost per GB than blob/table storage, justified by low-latency queries on activity data and flexible schema."
+        },
+        "dependencies": [],
+        "references": [
+          {
+            "title": "Cosmos DB overview",
+            "url": "https://learn.microsoft.com/azure/cosmos-db/introduction"
+          },
+          {
+            "title": "Consistency levels",
+            "url": "https://learn.microsoft.com/azure/cosmos-db/consistency-levels"
+          }
+        ]
+      },
+      {
+        "name": "activitydb",
+        "type": "Microsoft.DocumentDB/databaseAccounts/sqlDatabases",
+        "location": "eastus",
+        "sku": "N/A (Cosmos DB account-level)",
+        "properties": {
+          "resource": {
+            "id": "activitydb"
+          }
+        },
+        "reasoning": {
+          "whyChosen": "Logical database to group activity-related containers within the Cosmos DB account.",
+          "alternativesConsidered": [],
+          "tradeoffs": "Single database is sufficient; shared throughput can be added later."
+        },
+        "dependencies": [
+          "cosmos-recommend-prod-001"
+        ],
+        "dependencyReasoning": "SQL database is a child resource of the Cosmos DB account.",
+        "references": [
+          {
+            "title": "Cosmos DB SQL databases",
+            "url": "https://learn.microsoft.com/azure/cosmos-db/nosql/how-to-create-container"
+          }
+        ]
+      },
+      {
+        "name": "useractivity",
+        "type": "Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers",
+        "location": "eastus",
+        "sku": "N/A (container-level throughput)",
+        "properties": {
+          "resource": {
+            "id": "useractivity",
+            "partitionKey": {
+              "paths": [
+                "/userId"
+              ],
+              "kind": "Hash"
+            }
+          },
+          "options": {
+            "autoscaleSettings": {
+              "maxThroughput": 4000
+            }
+          }
+        },
+        "reasoning": {
+          "whyChosen": "Container to store user activity/interaction events. Partition key on /userId distributes load evenly for per-user queries. Autoscale 400–4000 RU/s handles traffic spikes without over-provisioning.",
+          "alternativesConsidered": [
+            "Fixed throughput (risk under-provisioning during spikes)",
+            "Partition by /timestamp (hot partition on recent data)"
+          ],
+          "tradeoffs": "Autoscale max 4000 RU/s is conservative; increase if traffic exceeds expectations. /userId ensures even distribution for user-centric queries."
+        },
+        "dependencies": [
+          "activitydb"
+        ],
+        "dependencyReasoning": "Container is a child resource of the SQL database.",
+        "references": [
+          {
+            "title": "Partitioning in Cosmos DB",
+            "url": "https://learn.microsoft.com/azure/cosmos-db/partitioning-overview"
+          },
+          {
+            "title": "Autoscale throughput",
+            "url": "https://learn.microsoft.com/azure/cosmos-db/provision-throughput-autoscale"
+          }
+        ]
+      }
+    ],
+    "overallReasoning": {
+      "summary": "This architecture pairs Azure ML managed online endpoints for low-latency, autoscalable model inference with Cosmos DB for high-throughput activity logging. Supporting resources (Storage Account, Key Vault, Container Registry, App Insights, Log Analytics) are required dependencies for the ML workspace. The managed online endpoint abstracts compute scaling, while Cosmos DB autoscale handles variable write loads from activity tracking.",
+      "tradeoffs": "Managed online endpoints trade full infrastructure control for operational simplicity. Cosmos DB autoscale may cost more at very low utilization vs. fixed throughput. Basic ACR tier limits storage to 10 GiB — upgrade if many model images accumulate. No VNet integration is configured by default; add private endpoints for production-hardened security."
+    },
+    "validation": "All resources deploy to eastus. ML workspace dependencies (Storage, Key Vault, App Insights, ACR) are provisioned before the workspace. The online endpoint is a child of the workspace. Cosmos DB is independent and can deploy in parallel. Naming follows CAF conventions. No conflicting SKU or subnet pairings.",
+    "references": [
+      {
+        "title": "Azure ML managed online endpoints",
+        "url": "https://learn.microsoft.com/azure/machine-learning/concept-endpoints-online"
+      },
+      {
+        "title": "Cosmos DB for activity logging",
+        "url": "https://learn.microsoft.com/azure/cosmos-db/introduction"
+      },
+      {
+        "title": "Azure naming conventions (CAF)",
+        "url": "https://learn.microsoft.com/azure/cloud-adoption-framework/ready/azure-best-practices/resource-abbreviations"
+      }
+    ]
+  }
+}

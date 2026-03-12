@@ -1,0 +1,282 @@
+{
+  "meta": {
+    "planId": "plan-docqa-001",
+    "generatedAt": "2026-03-11T12:49:44.948Z",
+    "version": "0.1-draft",
+    "status": "draft"
+  },
+  "inputs": {
+    "userGoal": "Create a real-time document Q&A API leveraging Azure OpenAI and Azure Cosmos DB, expose endpoints using Azure API Management, and enforce rate limits per user."
+  },
+  "plan": {
+    "architecturePrinciples": [
+      "Serverless-first for cost efficiency",
+      "Secure by default with managed identity",
+      "Per-user rate limiting at the API gateway",
+      "Low-latency document retrieval with Cosmos DB"
+    ],
+    "resources": [
+      {
+        "name": "oai-docqa-prod-001",
+        "type": "Microsoft.CognitiveServices/accounts",
+        "subtype": "Azure OpenAI Service",
+        "location": "eastus",
+        "sku": "S0",
+        "properties": {
+          "kind": "OpenAI",
+          "customSubDomainName": "oai-docqa-prod-001",
+          "publicNetworkAccess": "Enabled",
+          "disableLocalAuth": false
+        },
+        "reasoning": {
+          "whyChosen": "Azure OpenAI provides managed GPT model access for document Q&A with enterprise-grade SLAs. S0 is the standard production SKU. East US has broad OpenAI model availability.",
+          "alternativesConsidered": [
+            "Azure AI Services (AIServices kind) — broader multi-service account but unnecessary scope for this workload",
+            "Self-hosted open-source LLM on AKS — higher operational burden and no SLA advantage"
+          ],
+          "tradeoffs": "S0 is pay-per-token with no reserved capacity discount; for high-volume workloads, consider provisioned throughput units (PTU) later."
+        },
+        "dependencies": [],
+        "dependencyReasoning": "No dependencies — foundational AI resource.",
+        "references": [
+          {
+            "title": "Azure OpenAI Service overview",
+            "url": "https://learn.microsoft.com/azure/ai-services/openai/overview"
+          },
+          {
+            "title": "Bicep resource reference — Cognitive Services accounts (2025-06-01)",
+            "url": "https://learn.microsoft.com/azure/templates/microsoft.cognitiveservices/accounts?pivots=deployment-language-bicep"
+          }
+        ]
+      },
+      {
+        "name": "oai-docqa-prod-001/gpt-4o",
+        "type": "Microsoft.CognitiveServices/accounts/deployments",
+        "subtype": "OpenAI Model Deployment",
+        "location": "eastus",
+        "sku": "Standard",
+        "properties": {
+          "model": {
+            "format": "OpenAI",
+            "name": "gpt-4o",
+            "version": "2024-08-06"
+          },
+          "sku": {
+            "name": "Standard",
+            "capacity": 30
+          }
+        },
+        "reasoning": {
+          "whyChosen": "GPT-4o provides strong Q&A performance with lower latency and cost than GPT-4-turbo. 30K TPM capacity is a reasonable starting default for a production API.",
+          "alternativesConsidered": [
+            "GPT-4-turbo — higher cost, marginally better on some reasoning tasks",
+            "GPT-3.5-turbo — cheaper but lower quality answers for complex documents"
+          ],
+          "tradeoffs": "Standard deployment uses token-based billing; provisioned throughput (PTU) offers predictable latency at higher commitment."
+        },
+        "dependencies": [
+          "oai-docqa-prod-001"
+        ],
+        "dependencyReasoning": "Model deployment is a child resource of the OpenAI account.",
+        "references": [
+          {
+            "title": "Azure OpenAI model deployments",
+            "url": "https://learn.microsoft.com/azure/ai-services/openai/how-to/create-resource"
+          }
+        ]
+      },
+      {
+        "name": "cosmos-docqa-prod-001",
+        "type": "Microsoft.DocumentDB/databaseAccounts",
+        "subtype": "NoSQL API (Serverless)",
+        "location": "eastus",
+        "sku": "Standard",
+        "properties": {
+          "kind": "GlobalDocumentDB",
+          "databaseAccountOfferType": "Standard",
+          "capabilities": [
+            {
+              "name": "EnableServerless"
+            }
+          ],
+          "consistencyPolicy": {
+            "defaultConsistencyLevel": "Session"
+          },
+          "locations": [
+            {
+              "locationName": "eastus",
+              "failoverPriority": 0,
+              "isZoneRedundant": false
+            }
+          ],
+          "publicNetworkAccess": "Enabled"
+        },
+        "reasoning": {
+          "whyChosen": "Cosmos DB NoSQL API with serverless capacity provides low-latency JSON document storage and native vector search for document embeddings. Serverless is ideal for variable/unpredictable workloads with pay-per-request pricing. Session consistency balances performance and correctness for Q&A workflows.",
+          "alternativesConsidered": [
+            "Azure SQL Database — strong relational model but less natural for semi-structured documents and vector search",
+            "Azure AI Search — excellent for full-text and vector search but adds another service; Cosmos DB vector search consolidates storage and search"
+          ],
+          "tradeoffs": "Serverless is single-region only and cannot use shared throughput databases. If traffic becomes predictable and high-volume, switch to provisioned throughput with autoscale."
+        },
+        "dependencies": [],
+        "dependencyReasoning": "No dependencies — foundational data resource.",
+        "references": [
+          {
+            "title": "Cosmos DB overview",
+            "url": "https://learn.microsoft.com/azure/cosmos-db/introduction"
+          },
+          {
+            "title": "Bicep resource reference — Cosmos DB (2025-04-15)",
+            "url": "https://learn.microsoft.com/azure/templates/microsoft.documentdb/databaseaccounts?pivots=deployment-language-bicep"
+          },
+          {
+            "title": "Cosmos DB vector search",
+            "url": "https://learn.microsoft.com/azure/cosmos-db/nosql/vector-search"
+          }
+        ]
+      },
+      {
+        "name": "asp-docqa-prod-001",
+        "type": "Microsoft.Web/serverfarms",
+        "subtype": "Linux App Service Plan",
+        "location": "eastus",
+        "sku": "B1",
+        "properties": {
+          "kind": "linux",
+          "reserved": true,
+          "sku": {
+            "name": "B1",
+            "tier": "Basic",
+            "capacity": 1
+          }
+        },
+        "reasoning": {
+          "whyChosen": "B1 Linux plan is a cost-effective starting tier that supports always-on and custom domains. Suitable for initial production with straightforward vertical scaling to Standard/Premium when needed.",
+          "alternativesConsidered": [
+            "Azure Container Apps — serverless containers with auto-scaling, but adds complexity for a single API",
+            "Azure Functions Consumption — event-driven but cold starts impact real-time Q&A latency"
+          ],
+          "tradeoffs": "B1 does not support deployment slots or autoscale. Upgrade to S1+ for staging slots or P1v3+ for autoscale and zone redundancy."
+        },
+        "dependencies": [],
+        "dependencyReasoning": "No dependencies — compute hosting foundation.",
+        "references": [
+          {
+            "title": "App Service plan overview",
+            "url": "https://learn.microsoft.com/azure/app-service/overview-hosting-plans"
+          },
+          {
+            "title": "Bicep resource reference — App Service Plan (2024-11-01)",
+            "url": "https://learn.microsoft.com/azure/templates/microsoft.web/serverfarms?pivots=deployment-language-bicep"
+          }
+        ]
+      },
+      {
+        "name": "app-docqa-prod-001",
+        "type": "Microsoft.Web/sites",
+        "subtype": "Linux Web App",
+        "location": "eastus",
+        "sku": "B1",
+        "properties": {
+          "kind": "app,linux",
+          "serverFarmId": "[resourceId('Microsoft.Web/serverfarms', 'asp-docqa-prod-001')]",
+          "httpsOnly": true,
+          "siteConfig": {
+            "linuxFxVersion": "PYTHON|3.12",
+            "alwaysOn": true,
+            "minTlsVersion": "1.2"
+          }
+        },
+        "reasoning": {
+          "whyChosen": "App Service hosts the Q&A API backend with managed TLS, built-in auth hooks, and easy deployment via GitHub Actions or ZIP deploy. Python 3.12 is the standard runtime for OpenAI SDK workloads.",
+          "alternativesConsidered": [
+            "Azure Container Apps — more flexibility for containerized workloads but heavier setup",
+            "Azure Functions — good for event-driven but less suited for stateful API patterns"
+          ],
+          "tradeoffs": "App Service is PaaS with less container flexibility than Container Apps. For microservices or multi-container needs, consider migrating to Container Apps."
+        },
+        "dependencies": [
+          "asp-docqa-prod-001",
+          "oai-docqa-prod-001",
+          "cosmos-docqa-prod-001"
+        ],
+        "dependencyReasoning": "The web app runs on the App Service Plan and connects to OpenAI for inference and Cosmos DB for document storage.",
+        "references": [
+          {
+            "title": "App Service overview",
+            "url": "https://learn.microsoft.com/azure/app-service/overview"
+          },
+          {
+            "title": "Bicep resource reference — Web App (2024-11-01)",
+            "url": "https://learn.microsoft.com/azure/templates/microsoft.web/sites?pivots=deployment-language-bicep"
+          }
+        ]
+      },
+      {
+        "name": "apim-docqa-prod-001",
+        "type": "Microsoft.ApiManagement/service",
+        "subtype": "API Management (Consumption)",
+        "location": "eastus",
+        "sku": "Consumption",
+        "properties": {
+          "sku": {
+            "name": "Consumption",
+            "capacity": 0
+          },
+          "publisherEmail": "admin@contoso.com",
+          "publisherName": "Document QA Platform",
+          "customProperties": {
+            "Microsoft.WindowsAzure.ApiManagement.Gateway.Security.Protocols.Tls11": "false",
+            "Microsoft.WindowsAzure.ApiManagement.Gateway.Security.Protocols.Tls10": "false"
+          }
+        },
+        "reasoning": {
+          "whyChosen": "API Management Consumption tier provides a serverless API gateway with built-in rate-limiting policies (rate-limit-by-key), subscription key management, and usage analytics — all with zero standing cost. Per-user rate limiting is enforced via APIM policies keyed on subscription ID or JWT claims.",
+          "alternativesConsidered": [
+            "APIM Developer tier — includes a developer portal and more policy options but has a fixed monthly cost even at zero traffic",
+            "Azure Front Door with WAF — provides global load balancing and DDoS protection but lacks native API-level rate-limit-by-key policies"
+          ],
+          "tradeoffs": "Consumption tier has cold-start latency on first call and lacks VNet integration, built-in cache, and developer portal. Upgrade to BasicV2/StandardV2 for those features."
+        },
+        "dependencies": [
+          "app-docqa-prod-001"
+        ],
+        "dependencyReasoning": "APIM fronts the App Service backend; the API definition routes requests to the web app endpoint.",
+        "references": [
+          {
+            "title": "API Management overview",
+            "url": "https://learn.microsoft.com/azure/api-management/api-management-key-concepts"
+          },
+          {
+            "title": "Rate limiting policies",
+            "url": "https://learn.microsoft.com/azure/api-management/rate-limit-by-key-policy"
+          },
+          {
+            "title": "Bicep resource reference — APIM (2024-05-01)",
+            "url": "https://learn.microsoft.com/azure/templates/microsoft.apimanagement/service?pivots=deployment-language-bicep"
+          }
+        ]
+      }
+    ],
+    "overallReasoning": {
+      "summary": "This architecture pairs Azure OpenAI (GPT-4o) with Cosmos DB serverless for a low-latency, pay-per-use document Q&A backend. App Service hosts the Python API, and API Management Consumption tier acts as the gateway enforcing per-user rate limits via rate-limit-by-key policies. All resources are co-located in East US for minimal latency. The serverless/consumption choices across Cosmos DB and APIM keep costs proportional to actual usage.",
+      "tradeoffs": "Serverless Cosmos DB is single-region; if multi-region HA is needed, switch to provisioned throughput. APIM Consumption tier has cold-start latency and no VNet support; upgrade to StandardV2 for enterprise networking. B1 App Service Plan lacks autoscale — upgrade to S1+ or P1v3 for production scaling."
+    },
+    "validation": "All resources are in eastus. Cosmos DB serverless is single-region (matching the single location entry). APIM Consumption does not require VNet. App Service B1 supports always-on. OpenAI S0 with Standard deployment is compatible. No conflicting pairing constraints detected.",
+    "references": [
+      {
+        "title": "Azure OpenAI RAG architecture pattern",
+        "url": "https://learn.microsoft.com/azure/architecture/ai-ml/architecture/baseline-openai-e2e-chat"
+      },
+      {
+        "title": "API Management rate limiting best practices",
+        "url": "https://learn.microsoft.com/azure/api-management/rate-limit-by-key-policy"
+      },
+      {
+        "title": "Cosmos DB vector search for AI applications",
+        "url": "https://learn.microsoft.com/azure/cosmos-db/nosql/vector-search"
+      }
+    ]
+  }
+}

@@ -1,0 +1,320 @@
+{
+  "meta": {
+    "planId": "plan-iot-edge-anomaly-001",
+    "generatedAt": "2026-03-11T12:49:24.765Z",
+    "version": "0.1-draft",
+    "status": "draft"
+  },
+  "inputs": {
+    "userGoal": "Create an Azure IoT Hub edge deployment with AI module for anomaly detection, output events to Cosmos DB, and send SMS alerts via Logic Apps."
+  },
+  "plan": {
+    "architecturePrinciples": [
+      "Edge-first processing for low-latency anomaly detection",
+      "Serverless where possible to minimize operational overhead",
+      "Loosely coupled services via message queues",
+      "Centralized monitoring and diagnostics"
+    ],
+    "resources": [
+      {
+        "name": "iot-anomaly-prod-001",
+        "type": "Microsoft.Devices/IotHubs",
+        "location": "eastus",
+        "sku": "S1",
+        "properties": {
+          "skuCapacity": 1,
+          "partitionCount": 4,
+          "retentionTimeInDays": 1,
+          "features": "DeviceManagement",
+          "minTlsVersion": "1.2"
+        },
+        "reasoning": {
+          "whyChosen": "IoT Hub S1 is the minimum standard tier required for IoT Edge module deployments and message routing. It supports 400,000 messages/day per unit, device twins, direct methods, and edge deployments. Standard tier is required for IoT Edge (Free/Basic tiers do not support Edge).",
+          "alternativesConsidered": [
+            "IoT Hub S2 — higher message volume but unnecessary for initial workload",
+            "IoT Hub S3 — enterprise scale, overkill for starting deployment",
+            "Azure IoT Central — managed SaaS but less flexibility for custom edge modules"
+          ],
+          "tradeoffs": "S1 limits to 400K messages/day per unit; scale up to S2/S3 or add units if throughput is insufficient."
+        },
+        "dependencies": [],
+        "dependencyReasoning": "IoT Hub is the root resource; no upstream dependencies.",
+        "references": [
+          {
+            "title": "IoT Hub Bicep reference",
+            "url": "https://learn.microsoft.com/azure/templates/microsoft.devices/iothubs"
+          },
+          {
+            "title": "IoT Hub pricing tiers",
+            "url": "https://learn.microsoft.com/azure/iot-hub/iot-hub-scaling"
+          }
+        ]
+      },
+      {
+        "name": "cracranomaly001",
+        "type": "Microsoft.ContainerRegistry/registries",
+        "location": "eastus",
+        "sku": "Basic",
+        "properties": {
+          "adminUserEnabled": true
+        },
+        "reasoning": {
+          "whyChosen": "Azure Container Registry is required to store custom IoT Edge module container images. The AI anomaly detection module and any custom edge modules are built as Docker containers and pushed to ACR, which IoT Hub references in the edge deployment manifest. Basic SKU provides 10 GB storage, sufficient for initial edge module images.",
+          "alternativesConsidered": [
+            "Docker Hub — public registry, less secure for proprietary AI models",
+            "ACR Standard — more storage and throughput, unnecessary at this scale",
+            "GitHub Container Registry — viable but less integrated with Azure IoT Edge"
+          ],
+          "tradeoffs": "Basic tier has no geo-replication or private link support. Upgrade to Standard/Premium for production with network isolation."
+        },
+        "dependencies": [],
+        "dependencyReasoning": "ACR is standalone; edge module images are pushed here before IoT Hub deploys them.",
+        "references": [
+          {
+            "title": "ACR Bicep reference",
+            "url": "https://learn.microsoft.com/azure/templates/microsoft.containerregistry/registries"
+          },
+          {
+            "title": "IoT Edge module images",
+            "url": "https://learn.microsoft.com/azure/iot-edge/module-composition"
+          }
+        ]
+      },
+      {
+        "name": "asa-anomaly-prod-001",
+        "type": "Microsoft.StreamAnalytics/streamingjobs",
+        "location": "eastus",
+        "sku": "Standard",
+        "properties": {
+          "streamingUnits": 3,
+          "compatibilityLevel": "1.2",
+          "inputType": "Microsoft.Devices/IotHubs",
+          "outputs": [
+            "Cosmos DB (all anomaly events)",
+            "Service Bus Queue (alert triggers)"
+          ],
+          "queryDescription": "Uses built-in AnomalyDetection_SpikeAndDip and AnomalyDetection_ChangePoint ML functions to detect anomalies in incoming IoT telemetry. Anomaly events are output to Cosmos DB; high-severity anomalies are routed to Service Bus for SMS alerting."
+        },
+        "reasoning": {
+          "whyChosen": "Azure Stream Analytics provides built-in ML-based anomaly detection functions (AnomalyDetection_SpikeAndDip and AnomalyDetection_ChangePoint) that run directly in SQL queries — no external ML model or training required. It natively integrates with IoT Hub as input and supports Cosmos DB and Service Bus as outputs. 3 SUs provide sufficient compute for moderate device fleets.",
+          "alternativesConsidered": [
+            "Azure Functions — more flexible but requires custom anomaly detection code",
+            "Azure Machine Learning — more powerful models but higher complexity and cost",
+            "Stream Analytics on IoT Edge — enables edge-side detection but adds complexity; cloud job is simpler for initial deployment"
+          ],
+          "tradeoffs": "Cloud-side processing adds latency vs. edge processing. Built-in anomaly detection supports spike/dip and change point only — not multivariate or seasonal patterns. Scale SUs for higher throughput."
+        },
+        "dependencies": [
+          "iot-anomaly-prod-001",
+          "cosmos-anomaly-prod-001",
+          "sb-anomaly-prod-001",
+          "stanomalyprod001"
+        ],
+        "dependencyReasoning": "Reads from IoT Hub (input), writes to Cosmos DB (output) and Service Bus (output). Requires a Storage Account for job checkpointing.",
+        "references": [
+          {
+            "title": "Stream Analytics anomaly detection",
+            "url": "https://learn.microsoft.com/azure/stream-analytics/stream-analytics-machine-learning-anomaly-detection"
+          },
+          {
+            "title": "Stream Analytics Bicep reference",
+            "url": "https://learn.microsoft.com/azure/templates/microsoft.streamanalytics/streamingjobs"
+          }
+        ]
+      },
+      {
+        "name": "cosmos-anomaly-prod-001",
+        "type": "Microsoft.DocumentDB/databaseAccounts",
+        "location": "eastus",
+        "sku": "Standard",
+        "properties": {
+          "databaseAccountOfferType": "Standard",
+          "kind": "GlobalDocumentDB",
+          "consistencyPolicy": {
+            "defaultConsistencyLevel": "Session"
+          },
+          "capabilities": [
+            { "name": "EnableServerless" }
+          ],
+          "locations": [
+            {
+              "locationName": "eastus",
+              "failoverPriority": 0,
+              "isZoneRedundant": false
+            }
+          ],
+          "publicNetworkAccess": "Enabled"
+        },
+        "reasoning": {
+          "whyChosen": "Cosmos DB NoSQL API with Serverless capacity mode is ideal for variable IoT workloads — you pay only per RU consumed with no minimum throughput commitment. Session consistency provides read-your-writes guarantee with low latency. NoSQL API is the best fit for semi-structured telemetry and anomaly event data with flexible schema.",
+          "alternativesConsidered": [
+            "Cosmos DB provisioned throughput — predictable cost but requires capacity planning",
+            "Azure SQL Database — relational model less suited for variable-schema IoT telemetry",
+            "Azure Table Storage — cheaper but limited query capabilities and no automatic indexing"
+          ],
+          "tradeoffs": "Serverless is single-region only (no multi-region writes or geo-replication). 1 MB max document size. Max 5000 RU per request. Suitable for dev/moderate workloads; switch to provisioned throughput for high-volume production."
+        },
+        "dependencies": [],
+        "dependencyReasoning": "Cosmos DB is a standalone data store with no upstream infrastructure dependencies.",
+        "references": [
+          {
+            "title": "Cosmos DB Bicep reference",
+            "url": "https://learn.microsoft.com/azure/templates/microsoft.documentdb/databaseaccounts"
+          },
+          {
+            "title": "Cosmos DB serverless",
+            "url": "https://learn.microsoft.com/azure/cosmos-db/serverless"
+          }
+        ]
+      },
+      {
+        "name": "sb-anomaly-prod-001",
+        "type": "Microsoft.ServiceBus/namespaces",
+        "location": "eastus",
+        "sku": "Basic",
+        "properties": {
+          "minimumTlsVersion": "1.2",
+          "queues": [
+            {
+              "name": "anomaly-alerts",
+              "maxSizeInMegabytes": 1024,
+              "defaultMessageTimeToLive": "P1D"
+            }
+          ]
+        },
+        "reasoning": {
+          "whyChosen": "Service Bus queue provides reliable at-least-once delivery between Stream Analytics (anomaly detection output) and Logic Apps (SMS alert trigger). Basic tier supports queues which is sufficient for this point-to-point alert pattern. Service Bus is the recommended trigger for Logic Apps Consumption workflows.",
+          "alternativesConsidered": [
+            "Event Hub — higher throughput but overkill for low-volume alert messages",
+            "Storage Queue — cheaper but Logic Apps trigger has higher latency",
+            "Event Grid — event-driven but requires custom topic setup and more complex integration"
+          ],
+          "tradeoffs": "Basic tier does not support topics/subscriptions (only queues), sessions, or duplicate detection. Upgrade to Standard if publish-subscribe pattern is needed later."
+        },
+        "dependencies": [],
+        "dependencyReasoning": "Service Bus namespace is standalone; it receives messages from Stream Analytics and triggers Logic Apps.",
+        "references": [
+          {
+            "title": "Service Bus Bicep reference",
+            "url": "https://learn.microsoft.com/azure/templates/microsoft.servicebus/namespaces"
+          },
+          {
+            "title": "Service Bus queues overview",
+            "url": "https://learn.microsoft.com/azure/service-bus-messaging/service-bus-queues-topics-subscriptions"
+          }
+        ]
+      },
+      {
+        "name": "logic-sms-alert-prod-001",
+        "type": "Microsoft.Logic/workflows",
+        "location": "eastus",
+        "sku": "Consumption",
+        "properties": {
+          "workflowDescription": "Consumption Logic App triggered by Service Bus queue messages containing anomaly alerts. The workflow parses the alert payload, formats an SMS message with device ID, anomaly type, and severity, then sends the SMS via an Azure Communication Services or Twilio connector.",
+          "trigger": "Service Bus — When a message is received in a queue (anomaly-alerts)",
+          "actions": [
+            "Parse JSON — extract anomaly details",
+            "Send SMS — via Azure Communication Services connector or Twilio"
+          ],
+          "notes": "SMS sending requires an API connection resource for Azure Communication Services (Microsoft.Web/connections) or Twilio. The phone number and connector credentials are configured post-deployment."
+        },
+        "reasoning": {
+          "whyChosen": "Logic Apps Consumption is a serverless, pay-per-execution workflow engine with native Service Bus and SMS connectors. Zero infrastructure to manage. The trigger fires automatically when an anomaly alert arrives in the Service Bus queue. Consumption pricing (per action execution) is cost-effective for low-to-moderate alert volumes.",
+          "alternativesConsidered": [
+            "Logic Apps Standard — dedicated hosting, unnecessary for simple alert workflow",
+            "Azure Functions — requires custom SMS integration code vs. Logic Apps no-code connector",
+            "Power Automate — less suited for infrastructure-triggered workflows"
+          ],
+          "tradeoffs": "Consumption Logic Apps have cold-start latency (seconds). Limited to ~5 min execution timeout per action. SMS connector requires external service (Azure Communication Services or Twilio) subscription."
+        },
+        "dependencies": [
+          "sb-anomaly-prod-001"
+        ],
+        "dependencyReasoning": "Logic App triggers on messages in the Service Bus queue (anomaly-alerts).",
+        "references": [
+          {
+            "title": "Logic Apps Bicep reference",
+            "url": "https://learn.microsoft.com/azure/templates/microsoft.logic/workflows"
+          },
+          {
+            "title": "Logic Apps Service Bus connector",
+            "url": "https://learn.microsoft.com/azure/connectors/connectors-create-api-servicebus"
+          }
+        ]
+      },
+      {
+        "name": "stanomalyprod001",
+        "type": "Microsoft.Storage/storageAccounts",
+        "location": "eastus",
+        "sku": "Standard_LRS",
+        "properties": {
+          "kind": "StorageV2",
+          "accessTier": "Hot",
+          "supportsHttpsTrafficOnly": true,
+          "minimumTlsVersion": "TLS1_2",
+          "allowBlobPublicAccess": false
+        },
+        "reasoning": {
+          "whyChosen": "Storage Account is required by Stream Analytics for job checkpointing and state management. StorageV2 with Standard_LRS is the cost-effective default. Also serves as a landing zone for IoT Hub file uploads if needed later.",
+          "alternativesConsidered": [
+            "Standard_GRS — geo-redundant but adds cost; LRS sufficient for checkpointing",
+            "Standard_ZRS — zone-redundant, better durability but higher cost for non-critical checkpoint data"
+          ],
+          "tradeoffs": "LRS provides 11 nines durability within a single datacenter. No cross-region redundancy. Acceptable for checkpoint/ephemeral data."
+        },
+        "dependencies": [],
+        "dependencyReasoning": "Storage Account is standalone infrastructure.",
+        "references": [
+          {
+            "title": "Storage Account Bicep reference",
+            "url": "https://learn.microsoft.com/azure/templates/microsoft.storage/storageaccounts"
+          }
+        ]
+      },
+      {
+        "name": "log-anomaly-prod-001",
+        "type": "Microsoft.OperationalInsights/workspaces",
+        "location": "eastus",
+        "sku": "PerGB2018",
+        "properties": {
+          "retentionInDays": 30
+        },
+        "reasoning": {
+          "whyChosen": "Log Analytics provides centralized monitoring for IoT Hub diagnostics, Stream Analytics job metrics, Logic App run history, and Cosmos DB request metrics. PerGB2018 pay-as-you-go pricing is the recommended default for new workspaces. 30-day retention is sufficient for operational monitoring.",
+          "alternativesConsidered": [
+            "Application Insights standalone — less suited for infrastructure-centric IoT monitoring",
+            "Third-party monitoring (Datadog, Splunk) — additional cost and integration overhead"
+          ],
+          "tradeoffs": "Pay-per-GB ingestion cost scales with telemetry volume. Set daily cap to control costs. Increase retention for compliance if needed."
+        },
+        "dependencies": [],
+        "dependencyReasoning": "Log Analytics is a standalone observability resource. Other resources send diagnostics to it.",
+        "references": [
+          {
+            "title": "Log Analytics Bicep reference",
+            "url": "https://learn.microsoft.com/azure/templates/microsoft.operationalinsights/workspaces"
+          }
+        ]
+      }
+    ],
+    "overallReasoning": {
+      "summary": "This architecture deploys an IoT Edge solution where edge devices run AI anomaly detection modules (custom container or Azure Stream Analytics Edge module) managed by IoT Hub. Telemetry and anomaly events flow from edge devices through IoT Hub to a cloud-side Stream Analytics job that performs additional anomaly detection using built-in ML functions (AnomalyDetection_SpikeAndDip, AnomalyDetection_ChangePoint). Detected anomalies are persisted to Cosmos DB (Serverless, NoSQL API) for analysis and dashboarding, and simultaneously routed to a Service Bus queue that triggers a Consumption Logic App to send SMS alerts. The architecture is serverless-first (Consumption Logic App, Serverless Cosmos DB) to minimize operational cost and overhead.",
+      "tradeoffs": "Cloud-side anomaly detection via Stream Analytics adds seconds of latency compared to pure edge detection. Serverless Cosmos DB is single-region only — switch to provisioned throughput with multi-region writes for higher availability. SMS alerting via Logic Apps requires an Azure Communication Services or Twilio subscription for the SMS connector. Service Bus Basic tier limits to queues only — upgrade to Standard for topics/subscriptions if fan-out alerting is needed."
+    },
+    "validation": "All resources are deployed to eastus. IoT Hub S1 supports Edge deployments and message routing. Stream Analytics reads from IoT Hub and writes to Cosmos DB and Service Bus — both are supported output sinks. Cosmos DB Serverless with Session consistency is valid for single-region. Service Bus Basic supports queues for point-to-point messaging. Logic Apps Consumption supports Service Bus queue trigger and SMS connectors. Storage Account uses StorageV2/Standard_LRS compatible with Stream Analytics. No subnet, networking, or SKU conflicts detected.",
+    "references": [
+      {
+        "title": "IoT Edge + Stream Analytics tutorial",
+        "url": "https://learn.microsoft.com/azure/iot-edge/tutorial-deploy-stream-analytics"
+      },
+      {
+        "title": "Stream Analytics anomaly detection",
+        "url": "https://learn.microsoft.com/azure/stream-analytics/stream-analytics-machine-learning-anomaly-detection"
+      },
+      {
+        "title": "IoT reference architecture",
+        "url": "https://learn.microsoft.com/azure/architecture/reference-architectures/iot"
+      }
+    ]
+  }
+}

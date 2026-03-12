@@ -1,0 +1,29 @@
+{
+  "overallScore": 0.88,
+  "dimensions": {
+    "goalAlignment": 0.95,
+    "wafConformance": 0.72,
+    "dependencyCompleteness": 0.93,
+    "deploymentViability": 0.9
+  },
+  "risks": [
+    "No monitoring or diagnostics resources (Log Analytics workspace, Application Insights) are included — operational visibility will be limited",
+    "No managed identity configuration on VMSS instances — workloads will lack secure credential-free access to Azure services",
+    "SQL Managed Instance is not configured with zone redundancy — a single-zone failure could impact the database tier",
+    "No Key Vault resource for SQL MI administrator credentials — the administratorLogin password has no secure storage mechanism in the plan",
+    "Application-tier VMSS lacks autoscale settings — it cannot elastically respond to load changes unlike the presentation tier",
+    "Load Balancer health probe is defined but not explicitly referenced in loadBalancingRules — traffic may not be routed based on health status",
+    "No WAF or L7 protection — the Standard Load Balancer is L4-only with no SSL offload or application-layer security"
+  ],
+  "correctionsRecommended": [
+    "Add a Log Analytics workspace and configure diagnostic settings for VMSS, Load Balancer, NSGs, and SQL MI to enable operational monitoring",
+    "Add a Key Vault resource and store the SQL MI administrator password as a secret rather than inline",
+    "Assign system-assigned managed identities to both VMSS instances for secure access to Azure resources",
+    "Add an autoscale settings resource (Microsoft.Insights/autoscaleSettings) targeting vmss-application-prod-001",
+    "Link the health probe 'probe-http' in each loadBalancingRule via the 'probe' property to enable health-based traffic routing",
+    "Consider enabling zone redundancy on the SQL MI instance (requires zone-redundant or geo-zone-redundant backup storage)",
+    "Consider replacing or fronting the L4 Load Balancer with Application Gateway for WAF, SSL offload, and path-based routing"
+  ],
+  "hardDependencies": [],
+  "deployable": 1
+}

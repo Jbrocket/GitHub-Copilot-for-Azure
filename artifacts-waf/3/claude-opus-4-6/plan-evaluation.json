@@ -1,0 +1,27 @@
+{
+  "overallScore": 0.84,
+  "dimensions": {
+    "goalAlignment": 0.9,
+    "wafConformance": 0.65,
+    "dependencyCompleteness": 0.95,
+    "deploymentViability": 0.85
+  },
+  "risks": [
+    "Dapr pub/sub component type 'pubsub.azure.eventgrid' is a Tier 2 component in Azure Container Apps — not listed as a GA Tier 1 pub/sub. Runtime behavior may be less reliable or unsupported compared to Tier 1 options like Service Bus.",
+    "No managed identity configured — the Dapr component uses key-based authentication (accessKey secretRef) and Cosmos DB access has no identity-based auth, increasing secret management burden and attack surface.",
+    "Public network access is enabled on both Event Grid topic and Cosmos DB account — data plane endpoints are exposed to the internet without network isolation.",
+    "Cosmos DB serverless is single-region only — 'enableAutomaticFailover: true' has no effect since serverless accounts cannot add secondary regions for failover.",
+    "No Application Insights resource — limits distributed tracing and end-to-end diagnostics for the event-driven pipeline.",
+    "No VNet integration on the Container Apps Environment — all inter-service traffic traverses public endpoints."
+  ],
+  "correctionsRecommended": [
+    "Add a user-assigned managed identity to the Container App and configure the Dapr pub/sub component and Cosmos DB access to use managed identity instead of key-based authentication.",
+    "Consider switching the Dapr pub/sub component to 'pubsub.azure.servicebus.topics' (Tier 1 supported) or use Event Grid as an input binding ('bindings.azure.eventgrid') instead of a pub/sub component.",
+    "Add an Application Insights resource connected to the Log Analytics workspace for distributed tracing across the event pipeline.",
+    "Remove or set 'enableAutomaticFailover' to false on the Cosmos DB account since serverless capacity mode does not support multi-region failover.",
+    "Disable public network access on Cosmos DB and Event Grid; use private endpoints and managed identity when hardening for production.",
+    "Add an Azure Key Vault resource for centralized secrets management rather than inline secret references in the Dapr component."
+  ],
+  "hardDependencies": [],
+  "deployable": 1
+}

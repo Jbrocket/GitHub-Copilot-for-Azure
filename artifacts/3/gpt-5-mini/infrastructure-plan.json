@@ -1,0 +1,93 @@
+{
+  "meta": {
+    "name": "aca-event-driven-pipeline",
+    "description": "Event-driven data processing pipeline using Azure Container Apps (ACA), Event Grid, Pub/Sub integration, and Cosmos DB.",
+    "author": "user",
+    "status": "draft",
+    "assumptions": ["All defaults used", "Single region and resource group", "Public ingress for processor allowed"]
+  },
+  "resources": [
+    {
+      "type": "LogAnalytics",
+      "name": "log-analytics-workspace",
+      "sku": "PerGB2018",
+      "properties": {}
+    },
+    {
+      "type": "ContainerAppsEnvironment",
+      "name": "aca-env",
+      "sku": "default",
+      "dependsOn": ["log-analytics-workspace"],
+      "properties": {}
+    },
+    {
+      "type": "ContainerRegistry",
+      "name": "acr",
+      "sku": "Standard",
+      "properties": {}
+    },
+    {
+      "type": "ContainerApp",
+      "name": "processor-app",
+      "dependsOn": ["aca-env", "acr"],
+      "properties": {
+        "image": "<container-image-placeholder>",
+        "ingress": "external",
+        "cpu": "0.5",
+        "memory": "1Gi",
+        "env": [
+          {"name":"COSMOS_DB_CONNECTION_STRING","value":"<cosmos-connection-string-secret-ref>"}
+        ]
+      }
+    },
+    {
+      "type": "EventGridTopic",
+      "name": "ingest-topic",
+      "properties": {}
+    },
+    {
+      "type": "EventSubscription",
+      "name": "ingest-to-aca-subscription",
+      "dependsOn": ["ingest-topic", "processor-app"],
+      "properties": {
+        "source": "ingest-topic",
+        "destination": "processor-app",
+        "filter": {}
+      }
+    },
+    {
+      "type": "PubSubConnector",
+      "name": "pubsub-connector",
+      "properties": {
+        "provider": "ExternalPubSub",
+        "description": "Integration point for external Pub/Sub (assumed default). Events forwarded to Event Grid topic 'ingest-topic'."
+      }
+    },
+    {
+      "type": "CosmosDBAccount",
+      "name": "cosmosdb",
+      "sku": "Standard",
+      "properties": {
+        "api": "Core (SQL)",
+        "databases": [
+          {
+            "name": "processed",
+            "containers": [
+              {"name": "results", "partitionKey": "/id"}
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "outputs": {
+    "eventGridTopicEndpoint": "[ingest-topic endpoint]",
+    "containerAppIngress": "[processor-app ingress url]",
+    "cosmosDbAccountEndpoint": "[cosmosdb endpoint]"
+  },
+  "nextSteps": [
+    "Review and approve the plan",
+    "On approval, generate Bicep files in /infra and deploy",
+    "Provide container image or CI build pipeline to publish to ACR"
+  ]
+}

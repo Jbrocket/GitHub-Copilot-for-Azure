@@ -1,0 +1,102 @@
+{
+  "meta": {
+    "status": "draft",
+    "name": "real-time-doc-qa-api",
+    "author": "user",
+    "created": "2026-03-11T13:04:49Z"
+  },
+  "description": "Real-time Document Q&A API using Azure OpenAI and Azure Cosmos DB, exposed via Azure API Management with per-user rate limits. Defaults used where unspecified.",
+  "architecture": {
+    "overview": "Client apps call API Management endpoints which forward to a hosted API (Container App or Function) that performs retrieval from Cosmos DB and augmentation with Azure OpenAI. Per-user rate limits enforced in API Management using rate-limit-by-key or subscription quotas. Secrets stored in Key Vault. Application Insights for telemetry.",
+    "components": [
+      "Azure OpenAI (embeddings + chat/completions)",
+      "Azure Cosmos DB (documents + embeddings store)",
+      "API host: Azure Container Apps (or Azure Functions) hosting the Q&A API",
+      "Azure API Management (frontend, routing, per-user rate limiting & authentication)",
+      "Azure Key Vault (secrets)",
+      "Application Insights (monitoring & logging)"
+    ]
+  },
+  "resources": [
+    {
+      "id": "openai",
+      "type": "Microsoft.CognitiveServices/accounts (Azure OpenAI)",
+      "name": "qa-openai",
+      "sku": "S0",
+      "location": "[resourceGroup().location]",
+      "notes": "Provision Azure OpenAI resource; use embedding + chat/completions models."
+    },
+    {
+      "id": "cosmosAccount",
+      "type": "Microsoft.DocumentDB/databaseAccounts",
+      "name": "qa-cosmosdb",
+      "sku": { "name": "Standard_RUs", "capacity": 400 },
+      "location": "[resourceGroup().location]",
+      "notes": "Single-region Cosmos DB SQL API to store documents and embeddings. Defaults used for consistency (Session)."
+    },
+    {
+      "id": "cosmosDb",
+      "type": "Microsoft.DocumentDB/databaseAccounts/sqlDatabases",
+      "name": "qa-cosmosdb/qa-db",
+      "dependsOn": ["cosmosAccount"],
+      "notes": "Database to contain containers for documents and metadata."
+    },
+    {
+      "id": "cosmosContainer",
+      "type": "Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers",
+      "name": "qa-cosmosdb/qa-db/documents",
+      "dependsOn": ["cosmosDb"],
+      "notes": "Container holds original documents, metadata, and embedding vectors (if storing embeddings)."
+    },
+    {
+      "id": "apiHost",
+      "type": "Azure Container App / Function App",
+      "name": "qa-api-host",
+      "notes": "Host the Q&A API that queries Cosmos DB, calls Azure OpenAI for embeddings or completions, and returns answers in real-time. Defaults: 1 replica, autoscaling enabled."
+    },
+    {
+      "id": "apiManagement",
+      "type": "Microsoft.ApiManagement/service",
+      "name": "qa-apim",
+      "sku": "Consumption",
+      "notes": "Expose public endpoints, apply policies for authentication and per-user rate limits (rate-limit-by-key using user id or subscription key)."
+    },
+    {
+      "id": "keyVault",
+      "type": "Microsoft.KeyVault/vaults",
+      "name": "qa-keyvault",
+      "notes": "Store OpenAI keys, Cosmos DB connection strings, and other secrets."
+    },
+    {
+      "id": "appInsights",
+      "type": "Microsoft.Insights/components",
+      "name": "qa-appinsights",
+      "notes": "Telemetry for API host and APIM diagnostics."
+    }
+  ],
+  "security": {
+    "auth": "API Management will require JWT or subscription key. The API should validate tokens and use the user id claim for per-user policies.",
+    "secrets": "Store sensitive keys in Key Vault and reference them from the API host and APIM.",
+    "network": "Public endpoints for APIM; backend services restricted to inbound from APIM where possible."
+  },
+  "scaling_and_cost": {
+    "notes": "Use default SKUs; enable autoscale on host. Monitor RU/s on Cosmos DB and scale as needed. Azure OpenAI cost depends on model usage."
+  },
+  "outputs": {
+    "apimEndpoint": "https://{apim-service-name}.azure-api.net/qa",
+    "apiHostFQDN": "Provided after deployment",
+    "cosmosConnectionString": "Stored in Key Vault",
+    "openAiEndpoint": "Provisioned Azure OpenAI endpoint"
+  },
+  "deploymentSteps": [
+    "Create resource group and .azure/infrastructure-plan.json (this plan) with status=\"draft\".",
+    "Provision Key Vault, store secrets.",
+    "Provision Cosmos DB, create DB & container.",
+    "Provision Azure OpenAI resource and validate model availability.",
+    "Deploy API host (Container App or Function). Configure to read secrets from Key Vault and connect to Cosmos DB.",
+    "Provision API Management, import API, configure policies for JWT validation and rate-limit-by-key per user.",
+    "Enable Application Insights for telemetry, wire up APIM diagnostics.",
+    "Run integration tests and performance tests."
+  ],
+  "notes": "This plan is a draft and must be approved before generating IaC (bicep or terraform). Defaults used for region and SKUs per user instruction."
+}

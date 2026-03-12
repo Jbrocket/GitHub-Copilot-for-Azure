@@ -1,0 +1,28 @@
+{
+  "overallScore": 0.86,
+  "dimensions": {
+    "goalAlignment": 0.92,
+    "wafConformance": 0.72,
+    "dependencyCompleteness": 0.93,
+    "deploymentViability": 0.88
+  },
+  "risks": [
+    "No availability zones configured on either VMSS or SQL MI — limits resilience to datacenter-level failures",
+    "No NSG resources defined for any subnet — Standard Load Balancer blocks all inbound traffic by default without NSGs, and WAF requires NSGs on all subnets",
+    "No monitoring or diagnostics resources (Log Analytics, Application Insights, Azure Monitor) included in the plan",
+    "SQL MI subnet uses /27 (minimum 32 addresses) — leaves no room for scaling or adding instances; in-place subnet expansion is not supported",
+    "No Key Vault resource for managing TDE customer-managed encryption keys (plan relies on service-managed keys)",
+    "Application tier VMSS has autoscale disabled — may become a bottleneck under variable load"
+  ],
+  "correctionsRecommended": [
+    "Add availability zone configuration (zones property) to both VMSS resources and consider enabling zoneRedundant on SQL MI",
+    "Add NSG resources for each subnet with appropriate inbound/outbound rules — required for Standard LB inbound connectivity",
+    "Add an Azure Monitor Log Analytics workspace and diagnostic settings for operational visibility",
+    "Expand SQL MI subnet to /26 or larger to accommodate future growth and management operations",
+    "Consider enabling autoscale on the application tier VMSS to handle variable load",
+    "Add an explicit Public IP resource (Standard SKU) for the presentation load balancer",
+    "Consider replacing the Layer-4 Load Balancer with Application Gateway (with WAF) for the internet-facing presentation tier to gain Layer-7 routing and web application firewall protection"
+  ],
+  "hardDependencies": [],
+  "deployable": 1
+}

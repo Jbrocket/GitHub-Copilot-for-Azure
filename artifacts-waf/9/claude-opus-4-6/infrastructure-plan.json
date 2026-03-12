@@ -1,0 +1,849 @@
+{
+  "meta": {
+    "planId": "plan-dr-east-west-001",
+    "generatedAt": "2026-03-11T12:49:45.171Z",
+    "version": "0.1-draft",
+    "status": "draft"
+  },
+  "inputs": {
+    "userGoal": "Configure a site recovery plan for disaster failover from East US to West US Azure region, replicate major VM workloads, and automate DNS failbacks."
+  },
+  "plan": {
+    "architecturePrinciples": [
+      "Highly available across regions",
+      "Automated disaster recovery failover and failback",
+      "DNS-level traffic routing for zero-downtime failover",
+      "Minimal RPO/RTO through continuous replication",
+      "Secure by default with managed identity"
+    ],
+    "resources": [
+      {
+        "name": "rg-dr-primary-eastus-001",
+        "type": "Microsoft.Resources/resourceGroups",
+        "location": "eastus",
+        "sku": "N/A",
+        "properties": {},
+        "reasoning": {
+          "whyChosen": "Resource group to hold all primary (source) region workloads in East US. Grouping by region simplifies DR management.",
+          "alternativesConsidered": ["Single resource group for both regions"],
+          "tradeoffs": "Separate RGs per region adds management overhead but enables cleaner RBAC scoping and independent lifecycle management."
+        },
+        "dependencies": [],
+        "references": [
+          {
+            "title": "Resource group overview",
+            "url": "https://learn.microsoft.com/azure/azure-resource-manager/management/manage-resource-groups-portal"
+          }
+        ]
+      },
+      {
+        "name": "rg-dr-recovery-westus-001",
+        "type": "Microsoft.Resources/resourceGroups",
+        "location": "westus",
+        "sku": "N/A",
+        "properties": {},
+        "reasoning": {
+          "whyChosen": "Resource group to hold all recovery (target) region resources in West US, including the Recovery Services vault and target networking.",
+          "alternativesConsidered": ["Shared resource group with source"],
+          "tradeoffs": "Separate RG ensures recovery resources survive a full source-region outage."
+        },
+        "dependencies": [],
+        "references": [
+          {
+            "title": "Resource group overview",
+            "url": "https://learn.microsoft.com/azure/azure-resource-manager/management/manage-resource-groups-portal"
+          }
+        ]
+      },
+      {
+        "name": "vnet-workload-prod-eastus-001",
+        "type": "Microsoft.Network/virtualNetworks",
+        "location": "eastus",
+        "sku": "N/A",
+        "properties": {
+          "addressSpace": {
+            "addressPrefixes": ["10.1.0.0/16"]
+          },
+          "subnets": [
+            {
+              "name": "snet-vms-prod-eastus-001",
+              "addressPrefix": "10.1.1.0/24"
+            }
+          ]
+        },
+        "reasoning": {
+          "whyChosen": "Primary VNet for source VM workloads in East US. /16 address space allows growth. Foundational resource available in all Azure regions.",
+          "alternativesConsidered": ["Hub-spoke topology"],
+          "tradeoffs": "Single flat VNet is simpler for DR scenarios; hub-spoke adds complexity but better segmentation for large environments."
+        },
+        "dependencies": ["rg-dr-primary-eastus-001"],
+        "dependencyReasoning": "VNet must reside in the primary resource group.",
+        "references": [
+          {
+            "title": "Virtual Network overview",
+            "url": "https://learn.microsoft.com/azure/virtual-network/virtual-networks-overview"
+          },
+          {
+            "title": "Bicep resource reference",
+            "url": "https://learn.microsoft.com/azure/templates/microsoft.network/virtualnetworks"
+          }
+        ]
+      },
+      {
+        "name": "vnet-recovery-prod-westus-001",
+        "type": "Microsoft.Network/virtualNetworks",
+        "location": "westus",
+        "sku": "N/A",
+        "properties": {
+          "addressSpace": {
+            "addressPrefixes": ["10.2.0.0/16"]
+          },
+          "subnets": [
+            {
+              "name": "snet-vms-prod-westus-001",
+              "addressPrefix": "10.2.1.0/24"
+            }
+          ]
+        },
+        "reasoning": {
+          "whyChosen": "Target VNet for replicated VM workloads in West US. Non-overlapping address space (10.2.x) enables optional VNet peering with source.",
+          "alternativesConsidered": ["Same address space as source"],
+          "tradeoffs": "Non-overlapping CIDRs allow peering but require network mapping in ASR; overlapping is simpler but prevents peering."
+        },
+        "dependencies": ["rg-dr-recovery-westus-001"],
+        "dependencyReasoning": "VNet must reside in the recovery resource group.",
+        "references": [
+          {
+            "title": "Virtual Network overview",
+            "url": "https://learn.microsoft.com/azure/virtual-network/virtual-networks-overview"
+          }
+        ]
+      },
+      {
+        "name": "pip-vm-web-prod-eastus-001",
+        "type": "Microsoft.Network/publicIPAddresses",
+        "location": "eastus",
+        "sku": "Standard",
+        "properties": {
+          "publicIPAllocationMethod": "Static",
+          "publicIPAddressVersion": "IPv4"
+        },
+        "reasoning": {
+          "whyChosen": "Static Standard public IP for the web-tier VM. Standard SKU required for zone redundancy and Traffic Manager integration.",
+          "alternativesConsidered": ["Basic SKU"],
+          "tradeoffs": "Standard costs more but is required for Traffic Manager health probes and is the only supported SKU after Basic retirement (Sep 2025)."
+        },
+        "dependencies": ["rg-dr-primary-eastus-001"],
+        "references": [
+          {
+            "title": "Public IP overview",
+            "url": "https://learn.microsoft.com/azure/virtual-network/ip-services/public-ip-addresses"
+          }
+        ]
+      },
+      {
+        "name": "pip-vm-web-prod-westus-001",
+        "type": "Microsoft.Network/publicIPAddresses",
+        "location": "westus",
+        "sku": "Standard",
+        "properties": {
+          "publicIPAllocationMethod": "Static",
+          "publicIPAddressVersion": "IPv4"
+        },
+        "reasoning": {
+          "whyChosen": "Pre-provisioned static public IP in the recovery region for the web-tier VM after failover. Required for Traffic Manager failover endpoint.",
+          "alternativesConsidered": ["Dynamic allocation at failover time"],
+          "tradeoffs": "Pre-provisioning costs a small amount but guarantees IP availability during a disaster."
+        },
+        "dependencies": ["rg-dr-recovery-westus-001"],
+        "references": [
+          {
+            "title": "Set up public IPs after failover",
+            "url": "https://learn.microsoft.com/azure/site-recovery/concepts-public-ip-address-with-site-recovery"
+          }
+        ]
+      },
+      {
+        "name": "nic-vm-web-prod-eastus-001",
+        "type": "Microsoft.Network/networkInterfaces",
+        "location": "eastus",
+        "sku": "N/A",
+        "properties": {
+          "ipConfigurations": [
+            {
+              "name": "ipconfig1",
+              "subnetId": "snet-vms-prod-eastus-001",
+              "publicIPAddressId": "pip-vm-web-prod-eastus-001"
+            }
+          ]
+        },
+        "reasoning": {
+          "whyChosen": "NIC for the web-tier VM in the primary region. Must be in the same region as the VM.",
+          "alternativesConsidered": ["Accelerated networking NIC"],
+          "tradeoffs": "Standard NIC is sufficient for general workloads; accelerated networking adds performance for IO-heavy scenarios."
+        },
+        "dependencies": ["vnet-workload-prod-eastus-001", "pip-vm-web-prod-eastus-001"],
+        "dependencyReasoning": "NIC requires a subnet within the VNet and the public IP.",
+        "references": [
+          {
+            "title": "NIC overview",
+            "url": "https://learn.microsoft.com/azure/virtual-network/virtual-network-network-interface"
+          }
+        ]
+      },
+      {
+        "name": "nic-vm-app-prod-eastus-001",
+        "type": "Microsoft.Network/networkInterfaces",
+        "location": "eastus",
+        "sku": "N/A",
+        "properties": {
+          "ipConfigurations": [
+            {
+              "name": "ipconfig1",
+              "subnetId": "snet-vms-prod-eastus-001"
+            }
+          ]
+        },
+        "reasoning": {
+          "whyChosen": "NIC for the app-tier VM in the primary region. Private-only (no public IP) since the app tier is backend.",
+          "alternativesConsidered": ["Shared NIC with web tier"],
+          "tradeoffs": "Dedicated NIC per VM is standard practice for isolation and independent scaling."
+        },
+        "dependencies": ["vnet-workload-prod-eastus-001"],
+        "dependencyReasoning": "NIC requires a subnet within the VNet.",
+        "references": [
+          {
+            "title": "NIC overview",
+            "url": "https://learn.microsoft.com/azure/virtual-network/virtual-network-network-interface"
+          }
+        ]
+      },
+      {
+        "name": "vm-web-prod-eastus-001",
+        "type": "Microsoft.Compute/virtualMachines",
+        "location": "eastus",
+        "sku": "Standard_D2s_v5",
+        "properties": {
+          "hardwareProfile": {
+            "vmSize": "Standard_D2s_v5"
+          },
+          "storageProfile": {
+            "osDisk": {
+              "createOption": "FromImage",
+              "managedDisk": {
+                "storageAccountType": "Premium_LRS"
+              }
+            },
+            "imageReference": {
+              "publisher": "Canonical",
+              "offer": "0001-com-ubuntu-server-jammy",
+              "sku": "22_04-lts-gen2",
+              "version": "latest"
+            }
+          },
+          "osProfile": {
+            "computerName": "vm-web-prod-001",
+            "adminUsername": "azureadmin"
+          },
+          "securityProfile": {
+            "securityType": "TrustedLaunch"
+          }
+        },
+        "reasoning": {
+          "whyChosen": "Web-tier VM running in East US as the primary workload. Standard_D2s_v5 provides balanced compute/memory for general web workloads. Premium SSD for consistent IO. Trusted Launch for secure boot.",
+          "alternativesConsidered": ["Standard_B2s (burstable)", "App Service"],
+          "tradeoffs": "VMs give full OS control vs. PaaS simplicity. D2s_v5 is more consistent than burstable B-series for production traffic."
+        },
+        "dependencies": ["nic-vm-web-prod-eastus-001"],
+        "dependencyReasoning": "VM requires a NIC for networking.",
+        "references": [
+          {
+            "title": "Virtual Machines overview",
+            "url": "https://learn.microsoft.com/azure/virtual-machines/overview"
+          },
+          {
+            "title": "Bicep resource reference",
+            "url": "https://learn.microsoft.com/azure/templates/microsoft.compute/virtualmachines"
+          }
+        ]
+      },
+      {
+        "name": "vm-app-prod-eastus-001",
+        "type": "Microsoft.Compute/virtualMachines",
+        "location": "eastus",
+        "sku": "Standard_D2s_v5",
+        "properties": {
+          "hardwareProfile": {
+            "vmSize": "Standard_D2s_v5"
+          },
+          "storageProfile": {
+            "osDisk": {
+              "createOption": "FromImage",
+              "managedDisk": {
+                "storageAccountType": "Premium_LRS"
+              }
+            },
+            "imageReference": {
+              "publisher": "Canonical",
+              "offer": "0001-com-ubuntu-server-jammy",
+              "sku": "22_04-lts-gen2",
+              "version": "latest"
+            }
+          },
+          "osProfile": {
+            "computerName": "vm-app-prod-001",
+            "adminUsername": "azureadmin"
+          },
+          "securityProfile": {
+            "securityType": "TrustedLaunch"
+          }
+        },
+        "reasoning": {
+          "whyChosen": "App-tier VM running in East US for backend processing. Same SKU as web tier for consistency. Protected by ASR replication to West US.",
+          "alternativesConsidered": ["Standard_E2s_v5 (memory-optimized)"],
+          "tradeoffs": "D-series is balanced general purpose. E-series would be better if the app is memory-intensive."
+        },
+        "dependencies": ["nic-vm-app-prod-eastus-001"],
+        "dependencyReasoning": "VM requires a NIC for networking.",
+        "references": [
+          {
+            "title": "Virtual Machines overview",
+            "url": "https://learn.microsoft.com/azure/virtual-machines/overview"
+          }
+        ]
+      },
+      {
+        "name": "stdrprimarycache001",
+        "type": "Microsoft.Storage/storageAccounts",
+        "location": "eastus",
+        "sku": "Standard_LRS",
+        "properties": {
+          "kind": "StorageV2",
+          "supportsHttpsTrafficOnly": true,
+          "minimumTlsVersion": "TLS1_2",
+          "allowBlobPublicAccess": false
+        },
+        "reasoning": {
+          "whyChosen": "Cache storage account in the source region (East US) used by Azure Site Recovery during replication. ASR writes VM disk changes here before replicating to the target region. LRS is recommended since the cache is temporary — GRS is unnecessary.",
+          "alternativesConsidered": ["Standard_GRS"],
+          "tradeoffs": "LRS is cheaper and sufficient for cache; GRS would add redundancy but is not needed per Microsoft guidance for ASR cache accounts."
+        },
+        "dependencies": ["rg-dr-primary-eastus-001"],
+        "dependencyReasoning": "Cache storage must be in the source region resource group.",
+        "references": [
+          {
+            "title": "Reliability in Azure Site Recovery",
+            "url": "https://learn.microsoft.com/azure/reliability/reliability-site-recovery"
+          },
+          {
+            "title": "Storage account overview",
+            "url": "https://learn.microsoft.com/azure/storage/common/storage-account-overview"
+          }
+        ]
+      },
+      {
+        "name": "rsv-dr-prod-westus-001",
+        "type": "Microsoft.RecoveryServices/vaults",
+        "location": "westus",
+        "sku": "Standard",
+        "properties": {
+          "publicNetworkAccess": "Enabled"
+        },
+        "reasoning": {
+          "whyChosen": "Recovery Services vault deployed in the target region (West US) per Microsoft best practice. Placing the vault in the target region ensures failover and recovery operations remain accessible during a source-region outage. Contains replication policies, fabric definitions, and protection containers for ASR.",
+          "alternativesConsidered": ["Vault in source region", "Vault in third region"],
+          "tradeoffs": "Target-region vault ensures failover works during source outage. Third-region vault adds isolation but introduces latency and complexity. Source-region vault would be unavailable during source outage."
+        },
+        "dependencies": ["rg-dr-recovery-westus-001"],
+        "dependencyReasoning": "Vault must reside in the recovery resource group in the target region.",
+        "references": [
+          {
+            "title": "Quickstart: Create a Recovery Services vault by using Bicep",
+            "url": "https://learn.microsoft.com/azure/site-recovery/quickstart-create-vault-bicep"
+          },
+          {
+            "title": "Azure to Azure disaster recovery architecture",
+            "url": "https://learn.microsoft.com/azure/site-recovery/azure-to-azure-architecture"
+          },
+          {
+            "title": "Reliability in Azure Site Recovery",
+            "url": "https://learn.microsoft.com/azure/reliability/reliability-site-recovery"
+          }
+        ]
+      },
+      {
+        "name": "asr-policy-24h-prod-001",
+        "type": "Microsoft.RecoveryServices/vaults/replicationPolicies",
+        "location": "westus",
+        "sku": "N/A",
+        "properties": {
+          "providerSpecificInput": {
+            "instanceType": "A2A",
+            "multiVmSyncStatus": "Enable",
+            "appConsistentFrequencyInMinutes": 60,
+            "crashConsistentFrequencyInMinutes": 5,
+            "recoveryPointHistory": 1440
+          }
+        },
+        "reasoning": {
+          "whyChosen": "ASR replication policy for Azure-to-Azure (A2A) replication. Crash-consistent snapshots every 5 min for low RPO. App-consistent every 60 min for application-level recovery. 24-hour recovery point retention (1440 min) balances cost vs recovery flexibility. Multi-VM sync enabled for consistent failover of multi-tier apps.",
+          "alternativesConsidered": ["72-hour retention", "15-min crash-consistent frequency"],
+          "tradeoffs": "5-min crash-consistent gives ~5 min RPO. Longer retention increases storage cost. Higher frequency increases replication bandwidth."
+        },
+        "dependencies": ["rsv-dr-prod-westus-001"],
+        "dependencyReasoning": "Replication policy is a child resource of the Recovery Services vault.",
+        "references": [
+          {
+            "title": "Azure to Azure disaster recovery architecture",
+            "url": "https://learn.microsoft.com/azure/site-recovery/azure-to-azure-architecture"
+          },
+          {
+            "title": "Replication policy settings",
+            "url": "https://learn.microsoft.com/azure/site-recovery/azure-to-azure-tutorial-enable-replication"
+          }
+        ]
+      },
+      {
+        "name": "asr-fabric-eastus-001",
+        "type": "Microsoft.RecoveryServices/vaults/replicationFabrics",
+        "location": "westus",
+        "sku": "N/A",
+        "properties": {
+          "customDetails": {
+            "instanceType": "Azure",
+            "location": "eastus"
+          }
+        },
+        "reasoning": {
+          "whyChosen": "ASR replication fabric representing the source region (East US). Required by ASR to manage replication from this location.",
+          "alternativesConsidered": ["N/A — required by ASR"],
+          "tradeoffs": "No alternatives; this is a required ASR component."
+        },
+        "dependencies": ["rsv-dr-prod-westus-001"],
+        "dependencyReasoning": "Fabric is a child resource of the Recovery Services vault.",
+        "references": [
+          {
+            "title": "ASR architecture",
+            "url": "https://learn.microsoft.com/azure/site-recovery/azure-to-azure-architecture"
+          }
+        ]
+      },
+      {
+        "name": "asr-fabric-westus-001",
+        "type": "Microsoft.RecoveryServices/vaults/replicationFabrics",
+        "location": "westus",
+        "sku": "N/A",
+        "properties": {
+          "customDetails": {
+            "instanceType": "Azure",
+            "location": "westus"
+          }
+        },
+        "reasoning": {
+          "whyChosen": "ASR replication fabric representing the target region (West US). Required to define the recovery side of the replication pair.",
+          "alternativesConsidered": ["N/A — required by ASR"],
+          "tradeoffs": "No alternatives; this is a required ASR component."
+        },
+        "dependencies": ["rsv-dr-prod-westus-001"],
+        "dependencyReasoning": "Fabric is a child resource of the Recovery Services vault.",
+        "references": [
+          {
+            "title": "ASR architecture",
+            "url": "https://learn.microsoft.com/azure/site-recovery/azure-to-azure-architecture"
+          }
+        ]
+      },
+      {
+        "name": "asr-container-eastus-001",
+        "type": "Microsoft.RecoveryServices/vaults/replicationFabrics/replicationProtectionContainers",
+        "location": "westus",
+        "sku": "N/A",
+        "properties": {},
+        "reasoning": {
+          "whyChosen": "Protection container for the source fabric (East US). Logical grouping of protected items in the source region.",
+          "alternativesConsidered": ["N/A — required by ASR"],
+          "tradeoffs": "Required ASR component with no alternatives."
+        },
+        "dependencies": ["asr-fabric-eastus-001"],
+        "dependencyReasoning": "Container is a child of the source replication fabric.",
+        "references": [
+          {
+            "title": "ASR architecture",
+            "url": "https://learn.microsoft.com/azure/site-recovery/azure-to-azure-architecture"
+          }
+        ]
+      },
+      {
+        "name": "asr-container-westus-001",
+        "type": "Microsoft.RecoveryServices/vaults/replicationFabrics/replicationProtectionContainers",
+        "location": "westus",
+        "sku": "N/A",
+        "properties": {},
+        "reasoning": {
+          "whyChosen": "Protection container for the target fabric (West US). Receives replicated items during failover.",
+          "alternativesConsidered": ["N/A — required by ASR"],
+          "tradeoffs": "Required ASR component with no alternatives."
+        },
+        "dependencies": ["asr-fabric-westus-001"],
+        "dependencyReasoning": "Container is a child of the target replication fabric.",
+        "references": [
+          {
+            "title": "ASR architecture",
+            "url": "https://learn.microsoft.com/azure/site-recovery/azure-to-azure-architecture"
+          }
+        ]
+      },
+      {
+        "name": "asr-mapping-eastus-to-westus-001",
+        "type": "Microsoft.RecoveryServices/vaults/replicationFabrics/replicationProtectionContainers/replicationProtectionContainerMappings",
+        "location": "westus",
+        "sku": "N/A",
+        "properties": {
+          "targetProtectionContainerId": "asr-container-westus-001",
+          "policyId": "asr-policy-24h-prod-001",
+          "providerSpecificInput": {
+            "instanceType": "A2A"
+          }
+        },
+        "reasoning": {
+          "whyChosen": "Maps the source container (East US) to the target container (West US) using the replication policy. Defines the replication relationship direction.",
+          "alternativesConsidered": ["N/A — required by ASR"],
+          "tradeoffs": "Required ASR component."
+        },
+        "dependencies": ["asr-container-eastus-001", "asr-container-westus-001", "asr-policy-24h-prod-001"],
+        "dependencyReasoning": "Mapping requires both protection containers and the replication policy.",
+        "references": [
+          {
+            "title": "Enable replication tutorial",
+            "url": "https://learn.microsoft.com/azure/site-recovery/azure-to-azure-tutorial-enable-replication"
+          }
+        ]
+      },
+      {
+        "name": "asr-mapping-westus-to-eastus-001",
+        "type": "Microsoft.RecoveryServices/vaults/replicationFabrics/replicationProtectionContainers/replicationProtectionContainerMappings",
+        "location": "westus",
+        "sku": "N/A",
+        "properties": {
+          "targetProtectionContainerId": "asr-container-eastus-001",
+          "policyId": "asr-policy-24h-prod-001",
+          "providerSpecificInput": {
+            "instanceType": "A2A"
+          }
+        },
+        "reasoning": {
+          "whyChosen": "Reverse mapping (West US → East US) required for failback operations. Without this, re-protection after failover is not possible.",
+          "alternativesConsidered": ["Create on-demand during failback"],
+          "tradeoffs": "Pre-creating simplifies failback; on-demand creation adds delay during recovery."
+        },
+        "dependencies": ["asr-container-westus-001", "asr-container-eastus-001", "asr-policy-24h-prod-001"],
+        "dependencyReasoning": "Reverse mapping requires both containers and the policy.",
+        "references": [
+          {
+            "title": "Failback Azure VMs",
+            "url": "https://learn.microsoft.com/azure/site-recovery/azure-to-azure-tutorial-failback"
+          }
+        ]
+      },
+      {
+        "name": "asr-network-mapping-eastus-to-westus-001",
+        "type": "Microsoft.RecoveryServices/vaults/replicationFabrics/replicationNetworks/replicationNetworkMappings",
+        "location": "westus",
+        "sku": "N/A",
+        "properties": {
+          "recoveryFabricName": "asr-fabric-westus-001",
+          "recoveryNetworkId": "vnet-recovery-prod-westus-001",
+          "fabricSpecificDetails": {
+            "instanceType": "AzureToAzure",
+            "primaryNetworkId": "vnet-workload-prod-eastus-001"
+          }
+        },
+        "reasoning": {
+          "whyChosen": "Maps the source VNet (East US) to the target VNet (West US) so that replicated VMs connect to the correct network after failover.",
+          "alternativesConsidered": ["Auto-created VNet by ASR"],
+          "tradeoffs": "Explicit mapping gives full control over target networking; auto-creation may not match existing network design."
+        },
+        "dependencies": ["asr-fabric-eastus-001", "asr-fabric-westus-001", "vnet-workload-prod-eastus-001", "vnet-recovery-prod-westus-001"],
+        "dependencyReasoning": "Network mapping requires both fabrics and both VNets.",
+        "references": [
+          {
+            "title": "Network mapping for Azure VM DR",
+            "url": "https://learn.microsoft.com/azure/site-recovery/azure-to-azure-about-networking"
+          }
+        ]
+      },
+      {
+        "name": "asr-protected-vm-web-001",
+        "type": "Microsoft.RecoveryServices/vaults/replicationFabrics/replicationProtectionContainers/replicationProtectedItems",
+        "location": "westus",
+        "sku": "N/A",
+        "properties": {
+          "providerSpecificDetails": {
+            "instanceType": "A2A",
+            "fabricObjectId": "vm-web-prod-eastus-001",
+            "recoveryContainerId": "asr-container-westus-001",
+            "recoveryResourceGroupId": "rg-dr-recovery-westus-001",
+            "recoveryAzureNetworkId": "vnet-recovery-prod-westus-001",
+            "recoverySubnetName": "snet-vms-prod-westus-001",
+            "primaryStagingStorageAccountId": "stdrprimarycache001",
+            "recoveryAvailabilityType": "Single"
+          }
+        },
+        "reasoning": {
+          "whyChosen": "Enables ASR replication for the web-tier VM from East US to West US. Disk writes are cached in the staging storage account then replicated to managed disks in the target region.",
+          "alternativesConsidered": ["Manual backup-restore"],
+          "tradeoffs": "ASR provides near-zero RPO continuous replication vs. backup-restore which has higher RPO (hours). ASR costs more but significantly reduces RTO."
+        },
+        "dependencies": ["vm-web-prod-eastus-001", "asr-container-eastus-001", "asr-mapping-eastus-to-westus-001", "stdrprimarycache001", "vnet-recovery-prod-westus-001"],
+        "dependencyReasoning": "Protected item requires the source VM, ASR containers, container mapping, cache storage, and target VNet.",
+        "references": [
+          {
+            "title": "Enable replication for Azure VMs",
+            "url": "https://learn.microsoft.com/azure/site-recovery/azure-to-azure-tutorial-enable-replication"
+          },
+          {
+            "title": "Bicep resource reference",
+            "url": "https://learn.microsoft.com/azure/templates/microsoft.recoveryservices/vaults/replicationfabrics/replicationprotectioncontainers/replicationprotecteditems"
+          }
+        ]
+      },
+      {
+        "name": "asr-protected-vm-app-001",
+        "type": "Microsoft.RecoveryServices/vaults/replicationFabrics/replicationProtectionContainers/replicationProtectedItems",
+        "location": "westus",
+        "sku": "N/A",
+        "properties": {
+          "providerSpecificDetails": {
+            "instanceType": "A2A",
+            "fabricObjectId": "vm-app-prod-eastus-001",
+            "recoveryContainerId": "asr-container-westus-001",
+            "recoveryResourceGroupId": "rg-dr-recovery-westus-001",
+            "recoveryAzureNetworkId": "vnet-recovery-prod-westus-001",
+            "recoverySubnetName": "snet-vms-prod-westus-001",
+            "primaryStagingStorageAccountId": "stdrprimarycache001",
+            "recoveryAvailabilityType": "Single"
+          }
+        },
+        "reasoning": {
+          "whyChosen": "Enables ASR replication for the app-tier VM from East US to West US. Multi-VM consistency is enabled through the replication policy to ensure both VMs failover with consistent recovery points.",
+          "alternativesConsidered": ["Manual backup-restore"],
+          "tradeoffs": "Same as web-tier — continuous replication provides near-zero RPO at higher cost than periodic backups."
+        },
+        "dependencies": ["vm-app-prod-eastus-001", "asr-container-eastus-001", "asr-mapping-eastus-to-westus-001", "stdrprimarycache001", "vnet-recovery-prod-westus-001"],
+        "dependencyReasoning": "Protected item requires the source VM, ASR containers, container mapping, cache storage, and target VNet.",
+        "references": [
+          {
+            "title": "Enable replication for Azure VMs",
+            "url": "https://learn.microsoft.com/azure/site-recovery/azure-to-azure-tutorial-enable-replication"
+          }
+        ]
+      },
+      {
+        "name": "asr-recovery-plan-prod-001",
+        "type": "Microsoft.RecoveryServices/vaults/replicationRecoveryPlans",
+        "location": "westus",
+        "sku": "N/A",
+        "properties": {
+          "primaryFabricId": "asr-fabric-eastus-001",
+          "recoveryFabricId": "asr-fabric-westus-001",
+          "failoverDeploymentModel": "ResourceManager",
+          "groups": [
+            {
+              "groupType": "Boot",
+              "replicationProtectedItems": [
+                "asr-protected-vm-app-001"
+              ],
+              "startGroupActions": [],
+              "endGroupActions": []
+            },
+            {
+              "groupType": "Boot",
+              "replicationProtectedItems": [
+                "asr-protected-vm-web-001"
+              ],
+              "startGroupActions": [],
+              "endGroupActions": [
+                {
+                  "actionName": "dns-failback-runbook",
+                  "failoverTypes": ["PlannedFailover", "UnplannedFailover"],
+                  "failoverDirections": ["PrimaryToRecovery"],
+                  "customDetails": {
+                    "instanceType": "AutomationRunbookActionDetails",
+                    "runbookId": "runbook-dns-failover-prod-001",
+                    "fabricLocation": "Recovery"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "reasoning": {
+          "whyChosen": "ASR recovery plan orchestrates the failover sequence: app-tier boots first (Group 1), then web-tier (Group 2). After web-tier boots, the DNS failover runbook executes to update Traffic Manager routing. This ensures the application stack is fully up before DNS switches.",
+          "alternativesConsidered": ["Single boot group for all VMs"],
+          "tradeoffs": "Ordered boot groups ensure dependency ordering (app before web) but add failover time. Single group is faster but risks web tier starting before backend."
+        },
+        "dependencies": ["asr-protected-vm-web-001", "asr-protected-vm-app-001", "asr-fabric-eastus-001", "asr-fabric-westus-001"],
+        "dependencyReasoning": "Recovery plan requires protected items and both fabrics to be defined.",
+        "references": [
+          {
+            "title": "Create recovery plans",
+            "url": "https://learn.microsoft.com/azure/site-recovery/site-recovery-create-recovery-plans"
+          },
+          {
+            "title": "Add automation runbooks to recovery plans",
+            "url": "https://learn.microsoft.com/azure/site-recovery/site-recovery-runbook-automation"
+          }
+        ]
+      },
+      {
+        "name": "traf-dr-prod-001",
+        "type": "Microsoft.Network/trafficManagerProfiles",
+        "location": "global",
+        "sku": "N/A",
+        "properties": {
+          "trafficRoutingMethod": "Priority",
+          "dnsConfig": {
+            "relativeName": "traf-dr-prod-001",
+            "ttl": 30
+          },
+          "monitorConfig": {
+            "protocol": "HTTPS",
+            "port": 443,
+            "path": "/",
+            "intervalInSeconds": 10,
+            "timeoutInSeconds": 5,
+            "toleratedNumberOfFailures": 3
+          },
+          "endpoints": [
+            {
+              "name": "ep-primary-eastus",
+              "type": "Microsoft.Network/trafficManagerProfiles/azureEndpoints",
+              "properties": {
+                "targetResourceId": "pip-vm-web-prod-eastus-001",
+                "endpointStatus": "Enabled",
+                "priority": 1
+              }
+            },
+            {
+              "name": "ep-failover-westus",
+              "type": "Microsoft.Network/trafficManagerProfiles/azureEndpoints",
+              "properties": {
+                "targetResourceId": "pip-vm-web-prod-westus-001",
+                "endpointStatus": "Enabled",
+                "priority": 2
+              }
+            }
+          ]
+        },
+        "reasoning": {
+          "whyChosen": "Traffic Manager with Priority routing provides DNS-level failover. Primary endpoint (East US, priority 1) receives all traffic. If health probes fail, traffic automatically routes to failover endpoint (West US, priority 2). Low TTL (30s) ensures fast DNS propagation during failover. When East US recovers and probes pass again, traffic automatically fails back — this is the automated DNS failback mechanism.",
+          "alternativesConsidered": ["Azure Front Door", "Azure DNS with manual record updates"],
+          "tradeoffs": "Traffic Manager is DNS-only (no data path) — lower cost but no SSL offload or WAF. Front Door adds L7 features at higher cost. Manual DNS is cheapest but requires human intervention."
+        },
+        "dependencies": ["pip-vm-web-prod-eastus-001", "pip-vm-web-prod-westus-001"],
+        "dependencyReasoning": "Traffic Manager endpoints reference public IPs in both regions.",
+        "references": [
+          {
+            "title": "Azure Traffic Manager with Azure Site Recovery",
+            "url": "https://learn.microsoft.com/azure/site-recovery/concepts-traffic-manager-with-site-recovery"
+          },
+          {
+            "title": "Traffic Manager overview",
+            "url": "https://learn.microsoft.com/azure/traffic-manager/traffic-manager-overview"
+          },
+          {
+            "title": "Bicep resource reference",
+            "url": "https://learn.microsoft.com/azure/templates/microsoft.network/trafficmanagerprofiles"
+          }
+        ]
+      },
+      {
+        "name": "aa-dr-prod-westus-001",
+        "type": "Microsoft.Automation/automationAccounts",
+        "location": "westus",
+        "sku": "Basic",
+        "properties": {
+          "sku": {
+            "name": "Basic"
+          },
+          "identity": {
+            "type": "SystemAssigned"
+          }
+        },
+        "reasoning": {
+          "whyChosen": "Automation Account in the target region (West US) to host ASR recovery plan runbooks. Deployed in the recovery region so it remains accessible during a source-region outage. System-assigned managed identity for secure, keyless access to Azure resources (Traffic Manager, DNS).",
+          "alternativesConsidered": ["Azure Functions for automation", "Automation in source region"],
+          "tradeoffs": "Automation Account has native ASR integration for recovery plans. Azure Functions offers more flexibility but requires more setup. Source-region automation would be unavailable during failover."
+        },
+        "dependencies": ["rg-dr-recovery-westus-001"],
+        "dependencyReasoning": "Automation Account must be in the recovery resource group to survive source-region outages.",
+        "references": [
+          {
+            "title": "Disaster recovery for Azure Automation",
+            "url": "https://learn.microsoft.com/azure/automation/automation-disaster-recovery"
+          },
+          {
+            "title": "Add runbooks to ASR recovery plans",
+            "url": "https://learn.microsoft.com/azure/site-recovery/site-recovery-runbook-automation"
+          }
+        ]
+      },
+      {
+        "name": "runbook-dns-failover-prod-001",
+        "type": "Microsoft.Automation/automationAccounts/runbooks",
+        "location": "westus",
+        "sku": "N/A",
+        "properties": {
+          "runbookType": "PowerShell",
+          "logVerbose": true,
+          "logProgress": true,
+          "description": "ASR recovery plan runbook that updates Traffic Manager endpoint priorities after failover/failback. On failover: sets West US endpoint to priority 1. On failback: restores East US endpoint to priority 1. Triggered automatically by the ASR recovery plan."
+        },
+        "reasoning": {
+          "whyChosen": "PowerShell runbook integrated into the ASR recovery plan. Executes automatically after VM failover to swap Traffic Manager endpoint priorities, completing the DNS failover. On failback, the reverse logic restores original priorities — automating the full DNS failback cycle.",
+          "alternativesConsidered": ["Manual DNS updates", "Azure Logic Apps"],
+          "tradeoffs": "Runbooks integrate natively with ASR recovery plans. Manual updates are error-prone under pressure. Logic Apps add visual workflow but more complex to integrate with ASR."
+        },
+        "dependencies": ["aa-dr-prod-westus-001", "traf-dr-prod-001"],
+        "dependencyReasoning": "Runbook is a child of the Automation Account and operates on the Traffic Manager profile.",
+        "references": [
+          {
+            "title": "ASR Automation Runbooks quickstart",
+            "url": "https://github.com/Azure/azure-quickstart-templates/tree/master/demos/asr-automation-recovery/main.bicep"
+          },
+          {
+            "title": "Bicep resource reference",
+            "url": "https://learn.microsoft.com/azure/templates/microsoft.automation/2024-10-23/automationaccounts/runbooks"
+          }
+        ]
+      }
+    ],
+    "overallReasoning": {
+      "summary": "This disaster recovery architecture uses Azure Site Recovery (ASR) to continuously replicate two VM workloads (web-tier and app-tier) from East US to West US. A Recovery Services vault in the target region (West US) manages replication with a policy providing ~5-minute RPO via crash-consistent snapshots. Azure Traffic Manager with Priority routing automates DNS-level failover: health probes detect East US outage and redirect traffic to West US. An Automation Account runbook, triggered by the ASR recovery plan, handles Traffic Manager endpoint priority swaps for controlled failover and failback. The recovery plan enforces boot ordering (app-tier first, then web-tier) to respect application dependencies.",
+      "tradeoffs": "This plan optimizes for automated, low-RPO/RTO disaster recovery at the cost of additional ASR replication charges and pre-provisioned recovery-region resources. Traffic Manager provides DNS-based failover (no L7 features). The architecture assumes two representative VMs — production environments with more VMs should add them to the same ASR protection container and recovery plan. On-demand capacity reservations in West US are recommended (not included) to guarantee compute availability during a regional disaster."
+    },
+    "validation": "All resources use correct ARM types. Recovery Services vault placed in target region per Microsoft best practices. Cache storage uses LRS (not GRS) per ASR guidance. Public IPs use Standard SKU (Basic retiring Sep 2025). VNet address spaces are non-overlapping to allow optional peering. ASR replication components follow the required hierarchy: vault → fabrics → containers → mappings → protected items. Traffic Manager TTL of 30s ensures rapid DNS propagation. Automation Account uses managed identity (no stored credentials).",
+    "references": [
+      {
+        "title": "Azure to Azure disaster recovery architecture",
+        "url": "https://learn.microsoft.com/azure/site-recovery/azure-to-azure-architecture"
+      },
+      {
+        "title": "Azure Traffic Manager with Azure Site Recovery",
+        "url": "https://learn.microsoft.com/azure/site-recovery/concepts-traffic-manager-with-site-recovery"
+      },
+      {
+        "title": "Reliability in Azure Site Recovery",
+        "url": "https://learn.microsoft.com/azure/reliability/reliability-site-recovery"
+      },
+      {
+        "title": "Set up public IP addresses after failover",
+        "url": "https://learn.microsoft.com/azure/site-recovery/concepts-public-ip-address-with-site-recovery"
+      },
+      {
+        "title": "Enable global disaster recovery using Azure Site Recovery",
+        "url": "https://learn.microsoft.com/azure/site-recovery/azure-to-azure-enable-global-disaster-recovery"
+      }
+    ]
+  }
+}

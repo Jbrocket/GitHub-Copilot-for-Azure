@@ -1,0 +1,28 @@
+{
+  "overallScore": 0.86,
+  "dimensions": {
+    "goalAlignment": 0.95,
+    "wafConformance": 0.78,
+    "dependencyCompleteness": 0.95,
+    "deploymentViability": 0.72
+  },
+  "risks": [
+    "ACR 'acrmltraineus001' uses Standard SKU with publicNetworkAccess set to Disabled; disabling public network access requires Premium SKU and will fail deployment.",
+    "No VNet or private endpoint resources are defined despite publicNetworkAccess being disabled on the ML workspace, ACR, and compute; network-isolated resources need private endpoints to remain accessible.",
+    "No customer-managed key (CMK) configuration for the ML workspace; Microsoft-managed keys are used by default, which may not meet stricter compliance requirements for encrypted outputs.",
+    "Log Analytics retention is set to 30 days, which may be insufficient for audit compliance in regulated environments.",
+    "No explicit diagnostic settings for the storage account or Key Vault; only the ML workspace has diagnostics configured."
+  ],
+  "correctionsRecommended": [
+    "Upgrade ACR SKU from Standard to Premium to support publicNetworkAccess: Disabled and private endpoints.",
+    "Add VNet and private endpoint resources for the ML workspace, storage account, Key Vault, ACR, and Log Analytics workspace to enable the declared network isolation posture.",
+    "Add diagnostic settings resources for the storage account (stmltraineus001) and Key Vault (kv-mltrain-eus-001) to achieve full audit coverage.",
+    "Consider increasing Log Analytics retention beyond 30 days if audit compliance requires longer retention periods.",
+    "Consider adding a managed VNet isolation configuration to the ML workspace for simplified network security management.",
+    "Add RBAC role assignments for the ML workspace system-assigned managed identity to access storage, Key Vault, and ACR with least-privilege scopes."
+  ],
+  "hardDependencies": [
+    "ACR Standard SKU is incompatible with publicNetworkAccess: Disabled — requires Premium SKU to deploy successfully."
+  ],
+  "deployable": 0
+}

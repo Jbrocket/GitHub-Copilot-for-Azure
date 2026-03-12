@@ -1,0 +1,286 @@
+{
+  "meta": {
+    "planId": "plan-ecommerce-aks-001",
+    "generatedAt": "2026-03-11T13:22:30.371Z",
+    "version": "0.1-draft",
+    "status": "draft"
+  },
+  "inputs": {
+    "userGoal": "Deploy a microservices-based e-commerce backend with independent catalog, order, and payment services, use AKS with Helm for deployments, and implement service mesh for traffic control."
+  },
+  "plan": {
+    "resources": [
+      {
+        "name": "vnet-ecommerce-prod-001",
+        "type": "Microsoft.Network/virtualNetworks",
+        "subtype": "Virtual Network",
+        "location": "eastus",
+        "sku": "Standard",
+        "properties": {
+          "addressSpace": "10.20.0.0/16",
+          "subnets": [
+            "snet-aks-system-001",
+            "snet-aks-user-001",
+            "snet-db-001",
+            "snet-appgw-001"
+          ]
+        },
+        "reasoning": {
+          "whyChosen": "Provides private network isolation and segmented subnets for AKS, database, and ingress aligned with security and operational excellence.",
+          "alternativesConsidered": [
+            "Azure CNI Overlay with minimal subnet segmentation",
+            "Public-only endpoints"
+          ],
+          "tradeoffs": "More subnet planning and IP management overhead, but improves security boundaries and future scale."
+        },
+        "dependencies": [],
+        "dependencyReasoning": null,
+        "references": [
+          {
+            "title": "AKS networking concepts",
+            "url": "https://learn.microsoft.com/azure/aks/concepts-network"
+          }
+        ]
+      },
+      {
+        "name": "crecommerceprod001",
+        "type": "Microsoft.ContainerRegistry/registries",
+        "subtype": "Azure Container Registry",
+        "location": "eastus",
+        "sku": "Standard",
+        "properties": {
+          "adminUserEnabled": false
+        },
+        "reasoning": {
+          "whyChosen": "Central private image registry for catalog, order, and payment containers with managed identity pull support.",
+          "alternativesConsidered": [
+            "Docker Hub",
+            "GitHub Container Registry"
+          ],
+          "tradeoffs": "Standard is cost-effective but lacks Premium-only geo-replication and advanced network controls."
+        },
+        "dependencies": [],
+        "dependencyReasoning": null,
+        "references": [
+          {
+            "title": "Container Registry overview",
+            "url": "https://learn.microsoft.com/azure/container-registry/container-registry-intro"
+          }
+        ]
+      },
+      {
+        "name": "aks-ecommerce-prod-001",
+        "type": "Microsoft.ContainerService/managedClusters",
+        "subtype": "AKS Cluster",
+        "location": "eastus",
+        "sku": "Base/Standard",
+        "properties": {
+          "kubernetesVersion": "stable",
+          "nodePools": [
+            {
+              "name": "system",
+              "vmSize": "Standard_D4s_v5",
+              "count": 3
+            },
+            {
+              "name": "user",
+              "vmSize": "Standard_D4s_v5",
+              "count": 3
+            }
+          ],
+          "networkPlugin": "azure",
+          "outboundType": "loadBalancer",
+          "helmDeployment": true,
+          "serviceMesh": "AKS Istio add-on (managed)",
+          "workloadIdentity": true
+        },
+        "reasoning": {
+          "whyChosen": "AKS provides orchestrated scaling for independent microservices and supports Helm and managed Istio service mesh for routing, retries, and progressive traffic controls.",
+          "alternativesConsidered": [
+            "Azure Container Apps",
+            "AKS Automatic"
+          ],
+          "tradeoffs": "AKS adds cluster operations complexity but gives strongest control for service mesh and microservice-level traffic policy."
+        },
+        "dependencies": [
+          "vnet-ecommerce-prod-001",
+          "crecommerceprod001"
+        ],
+        "dependencyReasoning": "AKS requires VNet integration and uses ACR for workload images.",
+        "references": [
+          {
+            "title": "AKS overview",
+            "url": "https://learn.microsoft.com/azure/aks/intro-kubernetes"
+          },
+          {
+            "title": "AKS Istio service mesh add-on",
+            "url": "https://learn.microsoft.com/azure/aks/istio-about"
+          }
+        ]
+      },
+      {
+        "name": "pip-ecommerce-prod-001",
+        "type": "Microsoft.Network/publicIPAddresses",
+        "subtype": "Public IP",
+        "location": "eastus",
+        "sku": "Standard",
+        "properties": {
+          "allocationMethod": "Static"
+        },
+        "reasoning": {
+          "whyChosen": "Provides stable ingress frontend endpoint for e-commerce API traffic.",
+          "alternativesConsidered": [
+            "Internal-only ingress",
+            "Dynamic Public IP"
+          ],
+          "tradeoffs": "Public endpoint requires stronger WAF and TLS controls, but is necessary for external storefront/API access."
+        },
+        "dependencies": [],
+        "dependencyReasoning": null,
+        "references": [
+          {
+            "title": "Public IP addresses in Azure",
+            "url": "https://learn.microsoft.com/azure/virtual-network/ip-services/public-ip-addresses"
+          }
+        ]
+      },
+      {
+        "name": "appgw-ecommerce-prod-001",
+        "type": "Microsoft.Network/applicationGateways",
+        "subtype": "Application Gateway WAF v2",
+        "location": "eastus",
+        "sku": "WAF_v2",
+        "properties": {
+          "ingressController": "AKS Application Gateway Ingress Controller"
+        },
+        "reasoning": {
+          "whyChosen": "Adds Layer-7 routing and WAF protection for public microservice APIs before traffic reaches AKS ingress.",
+          "alternativesConsidered": [
+            "Nginx ingress with Azure Load Balancer",
+            "Azure Front Door + internal ingress"
+          ],
+          "tradeoffs": "Higher cost than basic ingress controllers, but stronger managed WAF and centralized edge policy."
+        },
+        "dependencies": [
+          "pip-ecommerce-prod-001",
+          "vnet-ecommerce-prod-001",
+          "aks-ecommerce-prod-001"
+        ],
+        "dependencyReasoning": "Application Gateway needs frontend IP, subnet placement, and AKS-backed ingress integration.",
+        "references": [
+          {
+            "title": "Use Application Gateway Ingress Controller with AKS",
+            "url": "https://learn.microsoft.com/azure/application-gateway/ingress-controller-overview"
+          }
+        ]
+      },
+      {
+        "name": "psql-ecommerce-prod-001",
+        "type": "Microsoft.DBforPostgreSQL/flexibleServers",
+        "subtype": "PostgreSQL Flexible Server",
+        "location": "eastus",
+        "sku": "Standard_D4ds_v5",
+        "properties": {
+          "tier": "GeneralPurpose",
+          "version": "16",
+          "highAvailability": "ZoneRedundant",
+          "backupRetentionDays": 14,
+          "privateAccess": true
+        },
+        "reasoning": {
+          "whyChosen": "Managed relational database for order and payment transactional consistency with HA and private networking.",
+          "alternativesConsidered": [
+            "Azure SQL Database",
+            "Cosmos DB"
+          ],
+          "tradeoffs": "PostgreSQL requires schema tuning and connection pooling, but provides strong ACID behavior and portability for commerce workloads."
+        },
+        "dependencies": [
+          "vnet-ecommerce-prod-001"
+        ],
+        "dependencyReasoning": "Private access requires delegated database subnet and VNet integration.",
+        "references": [
+          {
+            "title": "PostgreSQL Flexible Server overview",
+            "url": "https://learn.microsoft.com/azure/postgresql/flexible-server/overview"
+          }
+        ]
+      },
+      {
+        "name": "kv-ecommerce-prod-001",
+        "type": "Microsoft.KeyVault/vaults",
+        "subtype": "Azure Key Vault",
+        "location": "eastus",
+        "sku": "standard",
+        "properties": {
+          "purgeProtection": true,
+          "softDelete": true,
+          "publicNetworkAccess": "Disabled"
+        },
+        "reasoning": {
+          "whyChosen": "Centralized secret and certificate management for payment credentials and service connection secrets.",
+          "alternativesConsidered": [
+            "Kubernetes secrets only",
+            "App Configuration Key Vault references"
+          ],
+          "tradeoffs": "Adds IAM and secret rotation workflow complexity, but improves security posture for sensitive data."
+        },
+        "dependencies": [],
+        "dependencyReasoning": null,
+        "references": [
+          {
+            "title": "Azure Key Vault overview",
+            "url": "https://learn.microsoft.com/azure/key-vault/general/overview"
+          }
+        ]
+      },
+      {
+        "name": "law-ecommerce-prod-001",
+        "type": "Microsoft.OperationalInsights/workspaces",
+        "subtype": "Log Analytics Workspace",
+        "location": "eastus",
+        "sku": "PerGB2018",
+        "properties": {
+          "retentionInDays": 30
+        },
+        "reasoning": {
+          "whyChosen": "Required telemetry backend for AKS diagnostics, container logs, and centralized operational visibility.",
+          "alternativesConsidered": [
+            "Self-managed ELK stack"
+          ],
+          "tradeoffs": "Ingestion-based cost scales with log volume, but materially reduces observability management overhead."
+        },
+        "dependencies": [],
+        "dependencyReasoning": null,
+        "references": [
+          {
+            "title": "Azure Monitor Log Analytics workspace overview",
+            "url": "https://learn.microsoft.com/azure/azure-monitor/logs/log-analytics-workspace-overview"
+          }
+        ]
+      }
+    ],
+    "overallReasoning": {
+      "summary": "This architecture uses AKS as the microservices runtime, Helm for application release management, managed Istio service mesh for traffic control, ACR for images, PostgreSQL for transactional data, Key Vault for secrets, and Azure Monitor for operations. Defaults prioritize production-ready security and reliability while remaining cost-conscious.",
+      "tradeoffs": "Choosing AKS + service mesh increases operational complexity versus serverless/container PaaS, but provides stronger control over traffic policies, resilience behavior, and service isolation."
+    },
+    "validation": "Resources are co-located in eastus, networking and dependencies align with AKS + private database topology, and ingress/security/observability components are included for a production e-commerce backend baseline.",
+    "architecturePrinciples": [
+      "Secure by default",
+      "Scalable microservices",
+      "Highly available",
+      "Observable operations",
+      "Least-privilege access"
+    ],
+    "references": [
+      {
+        "title": "Microservices architecture on Azure Kubernetes Service",
+        "url": "https://learn.microsoft.com/azure/architecture/microservices/"
+      },
+      {
+        "title": "AKS baseline architecture",
+        "url": "https://learn.microsoft.com/azure/architecture/reference-architectures/containers/aks/baseline-aks"
+      }
+    ]
+  }
+}

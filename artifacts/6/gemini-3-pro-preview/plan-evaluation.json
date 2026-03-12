@@ -1,0 +1,30 @@
+{
+  "overallScore": 0.83,
+  "dimensions": {
+    "goalAlignment": 0.95,
+    "wafConformance": 0.6,
+    "dependencyCompleteness": 0.85,
+    "deploymentViability": 0.9
+  },
+  "risks": [
+    "No managed identity configuration for ADF or Databricks — credentials may be managed insecurely",
+    "Storage account uses Standard_LRS with no geo-redundancy — risk of data loss in a regional outage",
+    "No Azure Key Vault resource for managing secrets such as sqlAdministratorLogin password",
+    "No network isolation (VNet, private endpoints) for any resource — all services exposed to public internet",
+    "No monitoring or diagnostics configuration (Log Analytics, diagnostic settings) across any resource",
+    "Databricks standard SKU limits VNet injection and advanced security features (RBAC, audit logging)",
+    "No resource tagging strategy for cost management and operational governance"
+  ],
+  "correctionsRecommended": [
+    "Add managed identity configuration to ADF and Databricks for credential-free authentication to storage and Synapse",
+    "Upgrade storage SKU from Standard_LRS to Standard_ZRS or Standard_GRS for production reliability",
+    "Add an Azure Key Vault resource to securely store SQL admin passwords and connection strings",
+    "Add a VNet resource with private endpoints for Synapse, Storage, and Databricks to enforce network isolation",
+    "Add a Log Analytics workspace and configure diagnostic settings on all resources for observability",
+    "Consider upgrading Databricks to Premium SKU to enable VNet injection and enhanced security features",
+    "Add resource tags (environment, project, cost-center) to all resources for operational governance",
+    "Make ADF runtime dependency on the storage account explicit in its dependencies array"
+  ],
+  "hardDependencies": [],
+  "deployable": 1
+}

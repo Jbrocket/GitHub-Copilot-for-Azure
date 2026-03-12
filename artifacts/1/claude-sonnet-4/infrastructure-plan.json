@@ -1,0 +1,296 @@
+{
+  "meta": {
+    "planId": "doc-qa-api-plan-001",
+    "generatedAt": "2026-03-11T13:11:03.062Z",
+    "version": "0.1-draft",
+    "status": "draft"
+  },
+  "inputs": {
+    "userGoal": "Create a real-time document Q&A API leveraging Azure OpenAI and Azure Cosmos DB, expose endpoints using Azure API Management, and enforce rate limits per user."
+  },
+  "plan": {
+    "resources": [
+      {
+        "name": "docqa-storage-prod-001",
+        "type": "Microsoft.Storage/storageAccounts",
+        "subtype": "General Purpose v2",
+        "location": "eastus",
+        "sku": "Standard_LRS",
+        "properties": {
+          "kind": "StorageV2",
+          "accessTier": "Hot",
+          "allowBlobPublicAccess": false,
+          "supportsHttpsTrafficOnly": true,
+          "minimumTlsVersion": "TLS1_2"
+        },
+        "reasoning": {
+          "whyChosen": "Required for storing raw documents before processing. Standard_LRS provides cost-effective storage with local redundancy, sufficient for document processing pipeline. Hot tier for frequent access during document upload and processing.",
+          "alternativesConsidered": [
+            "Premium storage",
+            "Azure Data Lake Storage Gen2"
+          ],
+          "tradeoffs": "Standard_LRS trades geo-redundancy for cost efficiency. Acceptable for document storage where files can be re-uploaded if needed."
+        },
+        "dependencies": [],
+        "references": [
+          {
+            "title": "Azure Storage account overview",
+            "url": "https://learn.microsoft.com/azure/storage/common/storage-account-overview"
+          }
+        ]
+      },
+      {
+        "name": "docqa-keyvault-prod-001",
+        "type": "Microsoft.KeyVault/vaults",
+        "subtype": "Key Vault",
+        "location": "eastus",
+        "sku": "Standard",
+        "properties": {
+          "enableRbacAuthorization": true,
+          "enableSoftDelete": true,
+          "softDeleteRetentionInDays": 90,
+          "enablePurgeProtection": false,
+          "publicNetworkAccess": "Enabled"
+        },
+        "reasoning": {
+          "whyChosen": "Centralized secret management for API keys, connection strings, and certificates. RBAC-enabled for fine-grained access control. Required for securely managing Azure OpenAI API keys and Cosmos DB connection strings.",
+          "alternativesConsidered": [
+            "App Service configuration",
+            "Azure App Configuration"
+          ],
+          "tradeoffs": "Standard tier sufficient for this workload. Premium features like HSM-backed keys not required for this use case."
+        },
+        "dependencies": [],
+        "references": [
+          {
+            "title": "Azure Key Vault basic concepts",
+            "url": "https://learn.microsoft.com/azure/key-vault/general/basic-concepts"
+          }
+        ]
+      },
+      {
+        "name": "docqa-openai-prod-001",
+        "type": "Microsoft.CognitiveServices/accounts",
+        "subtype": "Azure OpenAI",
+        "location": "eastus",
+        "sku": "S0",
+        "properties": {
+          "kind": "OpenAI",
+          "customSubDomainName": "docqa-openai-prod-001",
+          "publicNetworkAccess": "Enabled",
+          "restrictOutboundNetworkAccess": false
+        },
+        "reasoning": {
+          "whyChosen": "Azure OpenAI provides GPT-4 models for document Q&A and embeddings generation for RAG patterns. S0 provides pay-per-use pricing ideal for real-time API workloads. Custom subdomain enables Microsoft Entra ID authentication.",
+          "alternativesConsidered": [
+            "OpenAI API directly",
+            "Azure AI Foundry",
+            "Self-hosted LLM"
+          ],
+          "tradeoffs": "Azure OpenAI offers enterprise-grade security and compliance vs direct OpenAI API. S0 tier provides flexibility but may have higher per-token costs than commitment tiers for high-volume usage."
+        },
+        "dependencies": [
+          "docqa-keyvault-prod-001"
+        ],
+        "dependencyReasoning": "Key Vault securely stores the OpenAI service API keys",
+        "references": [
+          {
+            "title": "Azure OpenAI Service overview",
+            "url": "https://learn.microsoft.com/azure/ai-services/openai/overview"
+          },
+          {
+            "title": "Retrieval-augmented generation (RAG) with Azure OpenAI",
+            "url": "https://learn.microsoft.com/azure/search/retrieval-augmented-generation-overview"
+          }
+        ]
+      },
+      {
+        "name": "cosmos-docqa-prod-001",
+        "type": "Microsoft.DocumentDB/databaseAccounts",
+        "subtype": "Cosmos DB for NoSQL",
+        "location": "eastus",
+        "sku": "Standard",
+        "properties": {
+          "kind": "GlobalDocumentDB",
+          "databaseAccountOfferType": "Standard",
+          "consistencyPolicy": {
+            "defaultConsistencyLevel": "Session"
+          },
+          "enableMultipleWriteLocations": false,
+          "enableAutomaticFailover": false,
+          "capabilities": [
+            {
+              "name": "EnableServerless"
+            }
+          ],
+          "publicNetworkAccess": "Enabled"
+        },
+        "reasoning": {
+          "whyChosen": "Cosmos DB for NoSQL with serverless pricing provides vector search capabilities for RAG pattern, storing both document metadata and embeddings. Session consistency balances performance and data consistency for Q&A scenarios. Serverless ideal for variable Q&A workloads.",
+          "alternativesConsidered": [
+            "Azure AI Search",
+            "PostgreSQL with pgvector",
+            "Provisioned throughput Cosmos DB"
+          ],
+          "tradeoffs": "Serverless provides automatic scaling but may have cold start latency. Vector search in Cosmos DB is newer vs Azure AI Search but offers better data colocation."
+        },
+        "dependencies": [
+          "docqa-keyvault-prod-001"
+        ],
+        "dependencyReasoning": "Key Vault stores Cosmos DB connection strings and keys",
+        "references": [
+          {
+            "title": "Vector search in Azure Cosmos DB for NoSQL",
+            "url": "https://learn.microsoft.com/azure/cosmos-db/vector-search"
+          },
+          {
+            "title": "Multitenancy for vector search in Azure Cosmos DB",
+            "url": "https://learn.microsoft.com/azure/cosmos-db/multi-tenancy-vector-search"
+          }
+        ]
+      },
+      {
+        "name": "plan-docqa-prod-001",
+        "type": "Microsoft.Web/serverfarms",
+        "subtype": "App Service Plan",
+        "location": "eastus",
+        "sku": "P1v3",
+        "properties": {
+          "kind": "Linux",
+          "reserved": true
+        },
+        "reasoning": {
+          "whyChosen": "P1v3 provides sufficient compute for real-time document processing and Q&A API. Linux containers offer better price/performance for Python/Node.js based API applications. Premium tier supports VNet integration and always-on features required for production APIs.",
+          "alternativesConsidered": [
+            "Container Apps",
+            "Azure Functions Premium",
+            "Standard tier App Service Plan"
+          ],
+          "tradeoffs": "P1v3 provides dedicated compute vs serverless options but ensures predictable performance for real-time APIs. Higher cost than Standard but necessary for production workloads."
+        },
+        "dependencies": [],
+        "references": [
+          {
+            "title": "Azure App Service plan overview",
+            "url": "https://learn.microsoft.com/azure/app-service/overview-hosting-plans"
+          }
+        ]
+      },
+      {
+        "name": "app-docqa-api-prod-001",
+        "type": "Microsoft.Web/sites",
+        "subtype": "Linux Web App",
+        "location": "eastus",
+        "sku": "P1v3",
+        "properties": {
+          "kind": "app,linux",
+          "serverFarmId": "/subscriptions/{subscription-id}/resourceGroups/{rg-name}/providers/Microsoft.Web/serverfarms/plan-docqa-prod-001",
+          "siteConfig": {
+            "linuxFxVersion": "PYTHON|3.12",
+            "alwaysOn": true,
+            "httpLoggingEnabled": true,
+            "requestTracingEnabled": true,
+            "detailedErrorLoggingEnabled": true
+          },
+          "httpsOnly": true,
+          "clientAffinityEnabled": false,
+          "publicNetworkAccess": "Enabled"
+        },
+        "reasoning": {
+          "whyChosen": "App Service provides managed hosting for the document Q&A API with integrated monitoring, deployment slots, and scaling capabilities. Python 3.12 runtime suitable for FastAPI/Flask based RAG implementation. Always-on ensures no cold starts for real-time API.",
+          "alternativesConsidered": [
+            "Azure Container Apps",
+            "Azure Functions",
+            "AKS"
+          ],
+          "tradeoffs": "App Service provides managed experience vs containers but less flexibility in runtime configuration. Good balance of management vs control for API workloads."
+        },
+        "dependencies": [
+          "plan-docqa-prod-001",
+          "cosmos-docqa-prod-001",
+          "docqa-openai-prod-001",
+          "docqa-storage-prod-001",
+          "docqa-keyvault-prod-001"
+        ],
+        "dependencyReasoning": "App Service hosts the API that connects to all other services - Cosmos DB for data, OpenAI for AI processing, Storage for documents, Key Vault for secrets",
+        "references": [
+          {
+            "title": "App Service on Linux",
+            "url": "https://learn.microsoft.com/azure/app-service/overview#app-service-on-linux"
+          }
+        ]
+      },
+      {
+        "name": "apim-docqa-prod-001",
+        "type": "Microsoft.ApiManagement/service",
+        "subtype": "API Management",
+        "location": "eastus",
+        "sku": "Developer",
+        "properties": {
+          "publisherName": "Document Q&A API",
+          "publisherEmail": "api@company.com",
+          "sku": {
+            "name": "Developer",
+            "capacity": 1
+          },
+          "virtualNetworkType": "None",
+          "apiVersionConstraint": {},
+          "restore": false,
+          "enableClientCertificate": false,
+          "disableGateway": false,
+          "natGatewayState": "Unsupported"
+        },
+        "reasoning": {
+          "whyChosen": "API Management provides centralized API gateway with rate limiting, authentication, and analytics. Developer tier suitable for non-production or development environments. Provides rate-limit-by-key policies for per-user rate limiting as required.",
+          "alternativesConsidered": [
+            "Azure Application Gateway",
+            "Third-party API gateway",
+            "Built-in rate limiting"
+          ],
+          "tradeoffs": "Developer tier doesn't include SLA and has usage limits but provides full feature set for development/testing. Production would require Standard or Premium tier."
+        },
+        "dependencies": [
+          "app-docqa-api-prod-001"
+        ],
+        "dependencyReasoning": "API Management proxies requests to the backend App Service API",
+        "references": [
+          {
+            "title": "Azure API Management overview",
+            "url": "https://learn.microsoft.com/azure/api-management/api-management-key-concepts"
+          },
+          {
+            "title": "Advanced request throttling with Azure API Management",
+            "url": "https://learn.microsoft.com/azure/api-management/api-management-sample-flexible-throttling"
+          }
+        ]
+      }
+    ],
+    "overallReasoning": {
+      "summary": "This architecture implements a production-ready document Q&A API using RAG pattern with Azure OpenAI and Cosmos DB. The design separates concerns with dedicated storage for raw documents (Storage Account), vector storage for embeddings (Cosmos DB), AI processing (Azure OpenAI), application hosting (App Service), and API management (API Management). All secrets are centralized in Key Vault following security best practices.",
+      "tradeoffs": "Serverless Cosmos DB and Developer tier API Management optimize for cost and variable workloads but may introduce latency. Production deployments should consider provisioned throughput for Cosmos DB and Standard/Premium API Management tiers for SLAs and higher limits."
+    },
+    "validation": "All resources are in the same region (eastus) to minimize latency. Dependencies are properly ordered with foundational services (Storage, Key Vault) created first, followed by data services (Cosmos DB), AI services (OpenAI), compute (App Service Plan/App Service), and finally API gateway (API Management). The architecture supports the RAG pattern with document ingestion via Storage, embedding generation via OpenAI, vector search via Cosmos DB, and rate-limited API access via API Management.",
+    "architecturePrinciples": [
+      "Highly available",
+      "Secure by default", 
+      "Cost-optimized",
+      "Scalable",
+      "Monitored and observable",
+      "Least privilege access"
+    ],
+    "references": [
+      {
+        "title": "Retrieval-augmented generation (RAG) with Azure DocumentDB",
+        "url": "https://learn.microsoft.com/azure/documentdb/rag"
+      },
+      {
+        "title": "Tutorial: Build a retrieval augmented generation app in Azure App Service",
+        "url": "https://learn.microsoft.com/azure/app-service/tutorial-ai-openai-search-python"
+      },
+      {
+        "title": "How to implement rate limiting in Azure API Management",
+        "url": "https://learn.microsoft.com/microsoft-cloud/dev/dev-proxy/concepts/implement-rate-limiting-azure-api-management"
+      }
+    ]
+  }
+}

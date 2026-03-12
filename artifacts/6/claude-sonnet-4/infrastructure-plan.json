@@ -1,0 +1,174 @@
+{
+  "meta": {
+    "planId": "plan-sales-data-pipeline-001",
+    "generatedAt": "2026-03-11T13:11:00Z",
+    "version": "0.1-draft",
+    "status": "draft"
+  },
+  "inputs": {
+    "userGoal": "Launch a data ingestion pipeline using Azure Data Factory for importing sales data daily, transform using Azure Databricks, and store results in Azure Synapse Analytics"
+  },
+  "plan": {
+    "resources": [
+      {
+        "name": "stsalespipelineprod001",
+        "type": "Microsoft.Storage/storageAccounts",
+        "subtype": "Data Lake Storage Gen2",
+        "location": "eastus2",
+        "sku": "Standard_LRS",
+        "properties": {
+          "kind": "StorageV2",
+          "isHnsEnabled": true,
+          "accessTier": "Hot",
+          "supportsHttpsTrafficOnly": true,
+          "minimumTlsVersion": "TLS1_2",
+          "allowBlobPublicAccess": false
+        },
+        "reasoning": {
+          "whyChosen": "Data Lake Storage Gen2 provides hierarchical namespace for efficient big data analytics, integrates seamlessly with Data Factory and Synapse Analytics. Hot tier optimized for frequent access of daily sales data.",
+          "alternativesConsidered": ["Azure Blob Storage", "Azure Files"],
+          "tradeoffs": "Slightly higher cost than cool tier but required for frequent daily processing"
+        },
+        "dependencies": [],
+        "references": [
+          {
+            "title": "Azure Data Lake Storage Gen2 overview",
+            "url": "https://learn.microsoft.com/azure/storage/blobs/data-lake-storage-introduction"
+          }
+        ]
+      },
+      {
+        "name": "adf-sales-etl-prod-eastus2-001",
+        "type": "Microsoft.DataFactory/factories",
+        "subtype": "Data Factory",
+        "location": "eastus2",
+        "sku": "Standard",
+        "properties": {
+          "publicNetworkAccess": "Enabled",
+          "identity": {
+            "type": "SystemAssigned"
+          }
+        },
+        "reasoning": {
+          "whyChosen": "Azure Data Factory provides managed data integration service for orchestrating daily sales data ingestion with built-in connectors, scheduling capabilities, and monitoring.",
+          "alternativesConsidered": ["Azure Logic Apps", "Azure Functions with Timer Triggers"],
+          "tradeoffs": "More complex than Logic Apps but provides better data transformation capabilities, monitoring, and enterprise-grade connectors"
+        },
+        "dependencies": ["stsalespipelineprod001"],
+        "dependencyReasoning": "Requires storage account for staging data during pipeline execution and as a data source/sink",
+        "references": [
+          {
+            "title": "Azure Data Factory overview",
+            "url": "https://learn.microsoft.com/azure/data-factory/introduction"
+          }
+        ]
+      },
+      {
+        "name": "dbw-sales-analytics-prod-eastus2-001",
+        "type": "Microsoft.Databricks/workspaces",
+        "subtype": "Standard",
+        "location": "eastus2",
+        "sku": "standard",
+        "properties": {
+          "publicNetworkAccess": "Enabled",
+          "requiredNsgRules": "AllRules",
+          "pricingTier": "standard"
+        },
+        "reasoning": {
+          "whyChosen": "Azure Databricks provides unified analytics platform with Apache Spark for complex data transformations. Excellent integration with Data Factory for automated pipeline execution and advanced analytics capabilities.",
+          "alternativesConsidered": ["Azure Synapse Spark Pools", "HDInsight"],
+          "tradeoffs": "Higher cost than Synapse Spark but provides better collaborative environment, notebook experience, and optimized Spark runtime"
+        },
+        "dependencies": ["stsalespipelineprod001"],
+        "dependencyReasoning": "Reads raw sales data from storage account and writes transformed data back to storage",
+        "references": [
+          {
+            "title": "Azure Databricks overview",
+            "url": "https://learn.microsoft.com/azure/databricks/introduction/"
+          }
+        ]
+      },
+      {
+        "name": "synw-sales-analytics-prod-eastus2-001",
+        "type": "Microsoft.Synapse/workspaces",
+        "subtype": "Analytics Workspace",
+        "location": "eastus2",
+        "sku": "Standard",
+        "properties": {
+          "defaultDataLakeStorage": {
+            "accountUrl": "https://stsalespipelineprod001.dfs.core.windows.net",
+            "filesystem": "synapse"
+          },
+          "sqlAdministratorLogin": "sqladmin",
+          "publicNetworkAccess": "Enabled",
+          "managedVirtualNetwork": "default"
+        },
+        "reasoning": {
+          "whyChosen": "Azure Synapse Analytics provides integrated analytics service combining data warehousing, big data analytics, and data integration. Optimized for analytical workloads on large datasets.",
+          "alternativesConsidered": ["Azure SQL Database", "Azure Data Explorer"],
+          "tradeoffs": "More complex setup than SQL Database but provides better performance for analytical queries and integration with data lake"
+        },
+        "dependencies": ["stsalespipelineprod001"],
+        "dependencyReasoning": "Uses storage account as the default data lake for workspace and data storage",
+        "references": [
+          {
+            "title": "Azure Synapse Analytics overview",
+            "url": "https://learn.microsoft.com/azure/synapse-analytics/overview-what-is"
+          }
+        ]
+      },
+      {
+        "name": "sqlpool-sales-dwh-prod-001",
+        "type": "Microsoft.Synapse/workspaces/sqlPools",
+        "subtype": "Dedicated SQL Pool",
+        "location": "eastus2",
+        "sku": "DW100c",
+        "properties": {
+          "createMode": "Default",
+          "collation": "SQL_Latin1_General_CP1_CI_AS",
+          "maxSizeBytes": 263882790666240
+        },
+        "reasoning": {
+          "whyChosen": "Dedicated SQL Pool provides optimized data warehouse for analytical queries on processed sales data with columnstore indexing and MPP architecture.",
+          "alternativesConsidered": ["Serverless SQL Pool", "Azure SQL Database"],
+          "tradeoffs": "Higher cost but provides significantly better performance for complex analytical queries and large datasets"
+        },
+        "dependencies": ["synw-sales-analytics-prod-eastus2-001"],
+        "dependencyReasoning": "Must be created within Synapse workspace as a child resource",
+        "references": [
+          {
+            "title": "Dedicated SQL pools in Azure Synapse Analytics",
+            "url": "https://learn.microsoft.com/azure/synapse-analytics/sql-data-warehouse/"
+          }
+        ]
+      }
+    ],
+    "overallReasoning": {
+      "summary": "Modern data pipeline architecture implementing medallion pattern: Data Factory orchestrates daily data ingestion, Storage Account provides scalable data lake with hierarchical namespace, Databricks handles complex transformations with Spark processing, and Synapse Analytics provides enterprise data warehouse capabilities for analytical workloads.",
+      "tradeoffs": "Higher operational cost but provides enterprise-grade scalability, monitoring, security, and analytics capabilities. All services support managed identity for secure authentication and are optimized for big data workloads."
+    },
+    "validation": "All resources are deployed in the same region (eastus2) for optimal performance and reduced data transfer costs. Dependencies are correctly ordered: Storage Account → Data Factory/Databricks → Synapse Workspace → SQL Pool. All resources support the daily ETL workflow with proper integration points.",
+    "architecturePrinciples": [
+      "Highly available",
+      "Secure by default",
+      "Cost-optimized for daily workloads",
+      "Scalable for growing data volumes",
+      "Monitorable and observable",
+      "Integration-ready"
+    ],
+    "references": [
+      {
+        "title": "Modern data warehouse architecture",
+        "url": "https://learn.microsoft.com/azure/architecture/databases/architecture/modern-data-warehouse"
+      },
+      {
+        "title": "Azure Data Factory best practices",
+        "url": "https://learn.microsoft.com/azure/data-factory/concepts-best-practices"
+      },
+      {
+        "title": "Azure analytics services comparison",
+        "url": "https://learn.microsoft.com/azure/architecture/data-guide/technology-choices/analytical-data-stores"
+      }
+    ]
+  }
+}

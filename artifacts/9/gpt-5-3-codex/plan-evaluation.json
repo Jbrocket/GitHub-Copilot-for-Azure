@@ -1,0 +1,31 @@
+{
+  "overallScore": 0.79,
+  "dimensions": {
+    "goalAlignment": 0.85,
+    "wafConformance": 0.65,
+    "dependencyCompleteness": 0.78,
+    "deploymentViability": 0.9
+  },
+  "risks": [
+    "Cache storage account (stasrcacheeus001) uses Standard_LRS; Microsoft recommends ZRS for zone-redundant replication staging — a zone failure in East US could interrupt replication data flow",
+    "DNS failback Function App (func-dns-failback-eus) is deployed only in East US; if that region suffers an outage the automated DNS failback orchestration will be unavailable",
+    "No monitoring or diagnostics resources (Application Insights, Log Analytics) are included — ASR replication health, Function App invocations, and Traffic Manager probe results will lack centralized observability",
+    "No network isolation controls (private endpoints, NSGs, or service endpoints) are defined for the storage account or Recovery Services vault, leaving management and data planes publicly accessible",
+    "No Recovery Plan resource (Microsoft.RecoveryServices/vaults/replicationRecoveryPlans) is included to orchestrate sequenced multi-VM failover and failback",
+    "Traffic Manager profile has no explicit endpoint child resources defined; East and West endpoints must be provisioned for priority-based failover to function"
+  ],
+  "correctionsRecommended": [
+    "Upgrade cache storage SKU from Standard_LRS to Standard_ZRS to ensure replication staging survives an availability zone failure",
+    "Deploy a second DNS failback Function App in West US (or relocate to West US) so automation is available when the primary region is down",
+    "Add an Application Insights resource and Log Analytics workspace to capture ASR replication telemetry, Function App logs, and Traffic Manager health probe metrics",
+    "Add a dedicated storage account for the Function App runtime (Azure Functions requires its own storage account separate from the ASR cache account)",
+    "Add a Recovery Plan resource under the vault to define VM failover groups, sequencing, and custom script actions",
+    "Add explicit Traffic Manager endpoint resources for East US (priority 1) and West US (priority 2)",
+    "Consider adding private endpoints for the cache storage account and Recovery Services vault to restrict network access",
+    "Add RBAC role assignments granting the Function App managed identity DNS Zone Contributor on the DNS zone and Reader on the Traffic Manager profile"
+  ],
+  "hardDependencies": [
+    "Function App (func-dns-failback-eus) requires a dedicated backing storage account for the Azure Functions runtime; this storage account is absent from the plan and the Function App will fail to deploy without it"
+  ],
+  "deployable": 1
+}

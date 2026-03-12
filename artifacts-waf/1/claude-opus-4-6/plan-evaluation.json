@@ -1,0 +1,29 @@
+{
+  "overallScore": 0.88,
+  "dimensions": {
+    "goalAlignment": 0.95,
+    "wafConformance": 0.68,
+    "dependencyCompleteness": 0.95,
+    "deploymentViability": 0.95
+  },
+  "risks": [
+    "No managed identity resource configured despite 'Secure by default with managed identity' being an architecture principle; disableLocalAuth is false on the OpenAI account, leaving key-based auth enabled",
+    "publicNetworkAccess is Enabled on both Azure OpenAI and Cosmos DB with no private endpoints or VNet integration planned",
+    "Cosmos DB serverless is limited to a single Azure region with no failover capability — a regional outage causes full data-tier unavailability",
+    "No monitoring resources (Application Insights, Log Analytics, or diagnostic settings) included for operational visibility",
+    "API Management Consumption tier has cold-start latency on first request, which may degrade the real-time Q&A experience under bursty traffic",
+    "App Service B1 (Basic) tier does not support autoscale or deployment slots, limiting production resilience and zero-downtime deployments",
+    "No Azure Key Vault resource for centralized secrets management"
+  ],
+  "correctionsRecommended": [
+    "Add a system-assigned managed identity to the App Service and configure Azure RBAC (Cognitive Services OpenAI User, Cosmos DB Built-in Data Contributor) for passwordless access; set disableLocalAuth to true on the OpenAI resource",
+    "Add an Azure Key Vault resource to store any application secrets and configure access via managed identity",
+    "Add an Application Insights resource connected to a Log Analytics workspace for end-to-end monitoring and diagnostics",
+    "Consider upgrading App Service Plan from B1 to S1+ for deployment slots or P1v3 for autoscale and zone redundancy",
+    "Evaluate adding private endpoints for Azure OpenAI and Cosmos DB to restrict data-plane access to the VNet",
+    "Consider upgrading API Management from Consumption to BasicV2 or StandardV2 to eliminate cold-start latency and enable VNet integration",
+    "Add diagnostic settings on all resources to route logs and metrics to Log Analytics"
+  ],
+  "hardDependencies": [],
+  "deployable": 1
+}

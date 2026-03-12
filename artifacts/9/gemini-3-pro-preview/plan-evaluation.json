@@ -1,0 +1,28 @@
+{
+  "overallScore": 0.77,
+  "dimensions": {
+    "goalAlignment": 0.82,
+    "wafConformance": 0.62,
+    "dependencyCompleteness": 0.78,
+    "deploymentViability": 0.88
+  },
+  "risks": [
+    "No NSG resources defined — source VM and public IPs are exposed without network security controls, and ASR requires outbound connectivity rules via service tags",
+    "Traffic Manager health probe uses HTTP on port 80 instead of HTTPS — monitoring traffic is unencrypted",
+    "No monitoring or diagnostics resources (Log Analytics workspace, diagnostic settings) for operational visibility into DR events",
+    "ASR fabric, protection container, and replication protected item resources are absent — replication will not be active until these are configured post-deployment",
+    "No managed identity assigned to the Automation Account — failback runbooks may require manual credential management",
+    "Automation Account has no runbook definitions — failback orchestration logic is not yet codified in the plan"
+  ],
+  "correctionsRecommended": [
+    "Add NSG resources for both source and target subnets with outbound rules allowing ASR service tags (Storage, AzureSiteRecovery, AzureActiveDirectory, EventHub)",
+    "Switch Traffic Manager monitor_config protocol from HTTP to HTTPS (port 443) for encrypted health probing",
+    "Add a Log Analytics workspace and configure diagnostic settings on the Recovery Services Vault, Traffic Manager profile, and Automation Account",
+    "Add ASR fabric and protection container resources to complete the replication topology from East US to West US",
+    "Assign a system-managed identity to the Automation Account for secure, credential-free access to Azure resources during failback",
+    "Add resource tags (e.g., environment, cost-center, dr-role) across all resources for operational and cost management",
+    "Consider adding a Network Interface (NIC) resource explicitly for the VM to clarify network attachment"
+  ],
+  "hardDependencies": [],
+  "deployable": 1
+}

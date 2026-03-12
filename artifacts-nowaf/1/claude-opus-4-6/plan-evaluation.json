@@ -1,0 +1,28 @@
+{
+  "overallScore": 0.87,
+  "dimensions": {
+    "goalAlignment": 0.88,
+    "wafConformance": 0.72,
+    "dependencyCompleteness": 0.95,
+    "deploymentViability": 0.92
+  },
+  "risks": [
+    "APIM Consumption tier does not support rate-limit-by-key policy; only subscription-level rate-limit is available, limiting true per-user throttling granularity",
+    "No managed identity configured on App Service — OpenAI and Cosmos DB connections would require key-based authentication or manual identity setup",
+    "Azure OpenAI has disableLocalAuth set to false, leaving API key authentication enabled against WAF security recommendations",
+    "Public network access is enabled on both Azure OpenAI and Cosmos DB, increasing attack surface without private endpoint isolation",
+    "Cosmos DB serverless is single-region only with no geo-redundancy or automatic failover capability",
+    "B1 App Service plan lacks autoscale — may bottleneck under sustained or bursty AI workload traffic",
+    "APIM Consumption tier provides no SLA and introduces cold-start latency (~1s) on first request"
+  ],
+  "correctionsRecommended": [
+    "Add a system-assigned managed identity to the App Service and assign Cognitive Services OpenAI User and Cosmos DB Built-in Data Contributor RBAC roles for keyless authentication",
+    "Upgrade APIM to Developer or Standard tier to enable rate-limit-by-key for true per-user rate limiting, or document the per-subscription-key-per-user approach as the rate limiting strategy",
+    "Set disableLocalAuth to true on the Azure OpenAI account and use managed identity with RBAC for all data plane access",
+    "Add an Azure Key Vault resource for centralized secret management (connection strings, API keys during transition)",
+    "Consider adding private endpoints for Azure OpenAI and Cosmos DB to restrict network access and align with WAF Security pillar recommendations",
+    "Evaluate upgrading App Service plan to S1 (autoscale, deployment slots) or P1v3 (VNet integration) as traffic grows"
+  ],
+  "hardDependencies": [],
+  "deployable": 1
+}

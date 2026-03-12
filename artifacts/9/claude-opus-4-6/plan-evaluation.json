@@ -1,0 +1,30 @@
+{
+  "overallScore": 0.85,
+  "dimensions": {
+    "goalAlignment": 0.95,
+    "wafConformance": 0.72,
+    "dependencyCompleteness": 0.82,
+    "deploymentViability": 0.92
+  },
+  "risks": [
+    "No NSG resources defined for either VNet — workload subnets lack network-level segmentation, leaving VMs exposed to lateral traffic within each VNet.",
+    "No monitoring or alerting resources (Log Analytics workspace, Azure Monitor alerts) for ASR replication health — silent replication failures could go undetected until an actual failover is needed.",
+    "No ASR Recovery Plan resource (Microsoft.RecoveryServices/vaults/replicationRecoveryPlans) to orchestrate multi-VM failover and failback with sequenced steps and automation runbook hooks.",
+    "Managed identity (id-aa-dr-prod-westus-001) is not connected to the Automation Account (aa-dr-prod-westus-001) in the dependency graph or properties — the runbook will not be able to authenticate to update Traffic Manager endpoints.",
+    "No RBAC role assignment resource granting the managed identity Contributor (or Traffic Manager Contributor) on the Traffic Manager profile — the DNS failback runbook will fail at runtime without this permission.",
+    "No reverse network mapping (West US → East US) defined for failback — VMs failing back to East US may not be placed in the correct source VNet automatically.",
+    "No diagnostic settings on the Recovery Services Vault — audit and replication event logs will not be captured for operational troubleshooting.",
+    "Traffic Manager DNS failover latency (~60s with 30s TTL + 10s probe interval) may exceed RTO expectations for latency-sensitive workloads — documented as a tradeoff but worth flagging."
+  ],
+  "correctionsRecommended": [
+    "Add NSG resources for snet-workload-prod-eastus-001 and snet-workload-prod-westus-001 with rules to restrict inbound/outbound traffic to required ports only.",
+    "Add a Log Analytics workspace and configure diagnostic settings on the Recovery Services Vault to capture ASR replication health events and Site Recovery alerts.",
+    "Add an ASR Recovery Plan resource (Microsoft.RecoveryServices/vaults/replicationRecoveryPlans) that groups both VMs and attaches the Automation runbook as a post-failover/post-failback action.",
+    "Add a dependency from aa-dr-prod-westus-001 to id-aa-dr-prod-westus-001 and configure the identity property on the Automation Account to reference the user-assigned managed identity.",
+    "Add a Microsoft.Authorization/roleAssignments resource granting the managed identity (id-aa-dr-prod-westus-001) the Traffic Manager Contributor role scoped to the Traffic Manager profile (traf-dr-prod-001).",
+    "Add a reverse network mapping resource (West US VNet → East US VNet) using asr-fabric-westus as the source fabric to support automated failback network placement.",
+    "Consider adding Azure Monitor alert rules for ASR replication RPO breaches and replication health degradation."
+  ],
+  "hardDependencies": [],
+  "deployable": 1
+}

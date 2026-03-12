@@ -1,0 +1,28 @@
+{
+  "overallScore": 0.86,
+  "dimensions": {
+    "goalAlignment": 0.95,
+    "wafConformance": 0.62,
+    "dependencyCompleteness": 0.93,
+    "deploymentViability": 0.92
+  },
+  "risks": [
+    "No managed identity configured — Container App uses key-based secrets for Event Grid and Cosmos DB, increasing credential exposure risk",
+    "All resources use public network access — suitable for development but not production-sensitive workloads",
+    "Cosmos DB serverless is single-region only — no failover or disaster recovery capability",
+    "No health probes (liveness, readiness, startup) configured on the Container App — unhealthy instances may receive traffic",
+    "No Key Vault integration — secrets are stored directly in Container App configuration rather than referenced from Key Vault",
+    "No custom KEDA scaling rule for Event Grid events — scale-to-zero relies on default scaling, not event-driven triggers"
+  ],
+  "correctionsRecommended": [
+    "Add a user-assigned managed identity to the Container App and use Azure RBAC for Cosmos DB and Event Grid access instead of key-based secrets",
+    "Store secrets in Azure Key Vault and reference them via Key Vault secret URIs in the Container App and Dapr component configuration",
+    "Configure liveness, readiness, and startup health probes on the Container App per WAF recommendations (e.g., failureThreshold: 3, periodSeconds: 10)",
+    "Add a custom scaling rule based on Event Grid or Dapr pub/sub metrics for true event-driven autoscaling",
+    "Consider disabling public network access on Cosmos DB and upgrading Event Grid to Premium SKU with private endpoints for production workloads",
+    "Add Cosmos DB database and container child resources (Microsoft.DocumentDB/databaseAccounts/sqlDatabases) for complete infrastructure definition",
+    "Enable CORS policy on the Container App ingress configuration per Azure IaC best practices"
+  ],
+  "hardDependencies": [],
+  "deployable": 1
+}

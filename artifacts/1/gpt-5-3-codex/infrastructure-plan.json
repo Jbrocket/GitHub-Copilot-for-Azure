@@ -1,0 +1,329 @@
+{
+  "meta": {
+    "planId": "plan-realtime-docqa-api-001",
+    "generatedAt": "2026-03-11T13:22:30.325Z",
+    "version": "0.1-draft",
+    "status": "draft"
+  },
+  "inputs": {
+    "userGoal": "Create a real-time document Q&A API using Azure OpenAI and Azure Cosmos DB, expose it through Azure API Management, and enforce per-user rate limits."
+  },
+  "plan": {
+    "resources": [
+      {
+        "name": "log-docqa-prod-eus",
+        "type": "Microsoft.OperationalInsights/workspaces",
+        "location": "eastus",
+        "sku": "PerGB2018",
+        "properties": {},
+        "reasoning": {
+          "whyChosen": "Provides centralized logs/metrics for API, APIM, and runtime diagnostics to support reliability and operations.",
+          "alternativesConsidered": [
+            "No centralized logging",
+            "Separate workspaces per service"
+          ],
+          "tradeoffs": "Single workspace lowers operational overhead but increases shared blast radius for retention/cost settings."
+        },
+        "dependencies": [],
+        "references": [
+          {
+            "title": "Azure Monitor Logs - Log Analytics workspace",
+            "url": "https://learn.microsoft.com/azure/azure-monitor/logs/quick-create-workspace"
+          }
+        ]
+      },
+      {
+        "name": "appi-docqa-api-prod-eus",
+        "type": "Microsoft.Insights/components",
+        "location": "eastus",
+        "sku": "workspace-based",
+        "properties": {
+          "applicationType": "web",
+          "workspaceResourceId": "log-docqa-prod-eus"
+        },
+        "reasoning": {
+          "whyChosen": "Gives end-to-end API telemetry and request tracing for troubleshooting latency and failures.",
+          "alternativesConsidered": [
+            "Basic platform metrics only"
+          ],
+          "tradeoffs": "Improves observability at extra ingestion/storage cost."
+        },
+        "dependencies": [
+          "log-docqa-prod-eus"
+        ],
+        "dependencyReasoning": "Workspace-based Application Insights requires Log Analytics workspace linkage.",
+        "references": [
+          {
+            "title": "Workspace-based Application Insights",
+            "url": "https://learn.microsoft.com/azure/azure-monitor/app/create-workspace-resource"
+          }
+        ]
+      },
+      {
+        "name": "uami-docqa-api-prod-eus",
+        "type": "Microsoft.ManagedIdentity/userAssignedIdentities",
+        "location": "eastus",
+        "sku": "standard",
+        "properties": {},
+        "reasoning": {
+          "whyChosen": "Enables secretless auth from API runtime to Azure OpenAI, Cosmos DB, and Key Vault via RBAC.",
+          "alternativesConsidered": [
+            "System-assigned managed identity",
+            "Connection strings and keys"
+          ],
+          "tradeoffs": "User-assigned identity adds one more resource but improves identity lifecycle control."
+        },
+        "dependencies": [],
+        "references": [
+          {
+            "title": "Managed identities for Azure resources",
+            "url": "https://learn.microsoft.com/azure/active-directory/managed-identities-azure-resources/overview"
+          }
+        ]
+      },
+      {
+        "name": "kv-docqa-prod-eus",
+        "type": "Microsoft.KeyVault/vaults",
+        "location": "eastus",
+        "sku": "standard",
+        "properties": {
+          "enableRbacAuthorization": true,
+          "publicNetworkAccess": "Enabled"
+        },
+        "reasoning": {
+          "whyChosen": "Stores non-MI secrets/config values (if needed) and supports secure configuration management.",
+          "alternativesConsidered": [
+            "App settings only without vault"
+          ],
+          "tradeoffs": "Adds operational dependency but improves secret governance and rotation posture."
+        },
+        "dependencies": [],
+        "references": [
+          {
+            "title": "Azure Key Vault overview",
+            "url": "https://learn.microsoft.com/azure/key-vault/general/overview"
+          }
+        ]
+      },
+      {
+        "name": "aoai-docqa-prod-eus",
+        "type": "Microsoft.CognitiveServices/accounts",
+        "subtype": "Azure OpenAI",
+        "location": "eastus",
+        "sku": "S0",
+        "properties": {
+          "kind": "OpenAI",
+          "customSubDomainName": "aoai-docqa-prod-eus"
+        },
+        "reasoning": {
+          "whyChosen": "Provides hosted LLM inference for document Q&A generation with enterprise controls.",
+          "alternativesConsidered": [
+            "Azure AI Foundry serverless model endpoints",
+            "External LLM providers"
+          ],
+          "tradeoffs": "Strong Azure integration but requires deployment quota and regional model availability checks."
+        },
+        "dependencies": [],
+        "references": [
+          {
+            "title": "Azure OpenAI Service overview",
+            "url": "https://learn.microsoft.com/azure/ai-services/openai/overview"
+          }
+        ]
+      },
+      {
+        "name": "aoai-docqa-prod-eus-gpt4o-mini",
+        "type": "Microsoft.CognitiveServices/accounts/deployments",
+        "location": "eastus",
+        "sku": "Standard",
+        "properties": {
+          "model": {
+            "name": "gpt-4o-mini",
+            "format": "OpenAI"
+          },
+          "versionUpgradeOption": "OnceNewDefaultVersionAvailable"
+        },
+        "reasoning": {
+          "whyChosen": "Balanced latency/cost profile suitable for real-time Q&A API response streaming.",
+          "alternativesConsidered": [
+            "gpt-4o",
+            "gpt-4.1-mini"
+          ],
+          "tradeoffs": "Lower cost and faster responses than larger models, with potential quality tradeoff on complex reasoning."
+        },
+        "dependencies": [
+          "aoai-docqa-prod-eus"
+        ],
+        "dependencyReasoning": "Model deployment is a child resource of Azure OpenAI account.",
+        "references": [
+          {
+            "title": "Azure OpenAI model deployments",
+            "url": "https://learn.microsoft.com/azure/ai-services/openai/how-to/create-resource"
+          }
+        ]
+      },
+      {
+        "name": "cosmos-docqa-prod-eus",
+        "type": "Microsoft.DocumentDB/databaseAccounts",
+        "subtype": "Cosmos DB for NoSQL",
+        "location": "eastus",
+        "sku": "Standard",
+        "properties": {
+          "databaseAccountOfferType": "Standard",
+          "locations": [
+            {
+              "locationName": "eastus",
+              "failoverPriority": 0
+            }
+          ],
+          "capabilities": [
+            {
+              "name": "EnableServerless"
+            }
+          ]
+        },
+        "reasoning": {
+          "whyChosen": "Stores document metadata, chat sessions, and retrieval context with low-latency JSON access.",
+          "alternativesConsidered": [
+            "Azure SQL Database",
+            "Azure Table Storage"
+          ],
+          "tradeoffs": "Serverless simplifies low-volume start but can become more expensive at sustained high throughput."
+        },
+        "dependencies": [],
+        "references": [
+          {
+            "title": "Azure Cosmos DB for NoSQL overview",
+            "url": "https://learn.microsoft.com/azure/cosmos-db/nosql/introduction"
+          }
+        ]
+      },
+      {
+        "name": "apim-docqa-prod-eus",
+        "type": "Microsoft.ApiManagement/service",
+        "location": "eastus",
+        "sku": "Basic",
+        "properties": {
+          "publisherEmail": "ops@example.com",
+          "publisherName": "docqa-platform",
+          "virtualNetworkType": "None"
+        },
+        "reasoning": {
+          "whyChosen": "Provides managed API gateway, authentication policy enforcement, and per-user throttling.",
+          "alternativesConsidered": [
+            "Azure Front Door + custom API gateway logic",
+            "App Gateway WAF only"
+          ],
+          "tradeoffs": "Higher gateway cost than lightweight alternatives, but richer policy and lifecycle management."
+        },
+        "dependencies": [],
+        "references": [
+          {
+            "title": "API Management policy reference",
+            "url": "https://learn.microsoft.com/azure/api-management/api-management-policies"
+          }
+        ]
+      },
+      {
+        "name": "acaenv-docqa-prod-eus",
+        "type": "Microsoft.App/managedEnvironments",
+        "location": "eastus",
+        "sku": "Consumption",
+        "properties": {
+          "appLogsConfiguration": {
+            "destination": "log-analytics"
+          }
+        },
+        "reasoning": {
+          "whyChosen": "Provides autoscaled container runtime suitable for stateless, low-latency Q&A API workloads.",
+          "alternativesConsidered": [
+            "Azure Functions",
+            "App Service"
+          ],
+          "tradeoffs": "Operationally simpler than AKS; fewer deep orchestration controls than Kubernetes."
+        },
+        "dependencies": [
+          "log-docqa-prod-eus"
+        ],
+        "dependencyReasoning": "Container Apps environment is configured to send logs to Log Analytics.",
+        "references": [
+          {
+            "title": "Azure Container Apps overview",
+            "url": "https://learn.microsoft.com/azure/container-apps/overview"
+          }
+        ]
+      },
+      {
+        "name": "aca-docqa-api-prod-eus",
+        "type": "Microsoft.App/containerApps",
+        "location": "eastus",
+        "sku": "Consumption",
+        "properties": {
+          "configuration": {
+            "ingress": {
+              "external": true,
+              "targetPort": 8080
+            },
+            "activeRevisionsMode": "Single"
+          },
+          "template": {
+            "containers": [
+              {
+                "name": "docqa-api",
+                "image": "docqaregistry.azurecr.io/docqa-api:latest"
+              }
+            ],
+            "scale": {
+              "minReplicas": 1,
+              "maxReplicas": 10
+            }
+          }
+        },
+        "reasoning": {
+          "whyChosen": "Hosts the real-time Q&A API with managed autoscaling and supports token-streaming responses.",
+          "alternativesConsidered": [
+            "Azure Functions HTTP trigger",
+            "AKS deployment"
+          ],
+          "tradeoffs": "Simpler operations than AKS, but less control for advanced networking/runtime tuning."
+        },
+        "dependencies": [
+          "acaenv-docqa-prod-eus",
+          "uami-docqa-api-prod-eus",
+          "aoai-docqa-prod-eus-gpt4o-mini",
+          "cosmos-docqa-prod-eus",
+          "kv-docqa-prod-eus",
+          "appi-docqa-api-prod-eus"
+        ],
+        "dependencyReasoning": "API runtime requires hosting environment, identity, model endpoint, data store, secret/config source, and telemetry.",
+        "references": [
+          {
+            "title": "Container Apps managed identity",
+            "url": "https://learn.microsoft.com/azure/container-apps/managed-identity"
+          }
+        ]
+      }
+    ],
+    "overallReasoning": {
+      "summary": "This architecture uses API Management as the public gateway, a Container Apps-hosted Q&A API for real-time responses, Azure OpenAI for generation, and Cosmos DB for conversation/document data, with managed identity, Key Vault, and centralized observability for secure operations.",
+      "tradeoffs": "The design prioritizes managed services and speed of delivery over maximum runtime/network customization; APIM and observability add cost but provide strong governance and operational control."
+    },
+    "validation": "Dependencies are ordered so platform services (identity, observability, data, AI) are provisioned before API runtime and gateway policy configuration.",
+    "architecturePrinciples": [
+      "Secure by default with managed identity and RBAC",
+      "API-first governance through APIM",
+      "Operational visibility with centralized logs and traces",
+      "Elastic scaling for low-latency real-time responses"
+    ],
+    "references": [
+      {
+        "title": "Azure Well-Architected Framework",
+        "url": "https://learn.microsoft.com/azure/well-architected/"
+      },
+      {
+        "title": "Rate limit by key policy",
+        "url": "https://learn.microsoft.com/azure/api-management/rate-limit-by-key-policy"
+      }
+    ]
+  }
+}

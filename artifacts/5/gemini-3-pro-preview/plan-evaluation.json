@@ -1,0 +1,29 @@
+{
+  "overallScore": 0.8,
+  "dimensions": {
+    "goalAlignment": 0.9,
+    "wafConformance": 0.62,
+    "dependencyCompleteness": 0.82,
+    "deploymentViability": 0.88
+  },
+  "risks": [
+    "No managed identity configured; Function App authenticates to Storage and Cosmos DB via connection strings and storage keys instead of RBAC-based access",
+    "No Application Insights resource included; monitoring, exception tracking, and diagnostics are absent from the plan",
+    "Consumption plan Y1 is used instead of the recommended Flex Consumption (FC1) plan; may cause cold starts and imposes a 5-10 minute execution time limit for PDF processing",
+    "Cosmos DB connection string is embedded inline in Function App app settings rather than stored in and referenced from Key Vault",
+    "Storage account does not disable local auth (allowSharedKeyAccess) or public blob access (allowBlobPublicAccess) per security best practices",
+    "Single-region Cosmos DB deployment with zone redundancy disabled; limited fault tolerance for metadata persistence"
+  ],
+  "correctionsRecommended": [
+    "Add a user-assigned managed identity resource and attach it to the Function App; use RBAC role assignments for Storage and Cosmos DB access instead of connection strings",
+    "Add an Application Insights resource (Microsoft.Insights/components) and wire it to the Function App via APPINSIGHTS_INSTRUMENTATIONKEY and APPLICATIONINSIGHTS_CONNECTION_STRING app settings",
+    "Switch from Consumption Y1 to Flex Consumption FC1 plan for improved cold-start performance, deployment support, and functionAppConfig with deployment.storage configuration",
+    "Move the Cosmos DB connection string into Key Vault and use a Key Vault reference (@Microsoft.KeyVault(...)) in the Function App app settings",
+    "Set allowBlobPublicAccess to false and allowSharedKeyAccess to false on the Storage Account resource properties",
+    "Add RBAC role assignments for the managed identity: Storage Blob Data Owner, Storage Blob Data Contributor, Storage Queue Data Contributor, Storage Table Data Contributor, and Monitoring Metrics Publisher",
+    "Add diagnostic settings resources (Microsoft.Insights/diagnosticSettings) for the Function App and other key resources",
+    "Add kv-pdfconverter-dev-001 to the Function App dependencies array to reflect the intended Key Vault integration from the user goal"
+  ],
+  "hardDependencies": [],
+  "deployable": 1
+}

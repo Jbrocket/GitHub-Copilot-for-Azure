@@ -1,0 +1,28 @@
+{
+  "overallScore": 0.87,
+  "dimensions": {
+    "goalAlignment": 0.88,
+    "wafConformance": 0.73,
+    "dependencyCompleteness": 0.95,
+    "deploymentViability": 0.95
+  },
+  "risks": [
+    "Single-region deployment with no zone redundancy — Cosmos DB has isZoneRedundant=false and Storage uses Standard_LRS, leaving the system vulnerable to availability-zone failures",
+    "Public network access enabled on ML workspace (publicNetworkAccess=Enabled) and Cosmos DB (publicNetworkAccess=Enabled), exposing data and management planes to the internet",
+    "No private endpoints or VNet integration configured for any resource, limiting network-level isolation",
+    "Storage account and Cosmos DB do not explicitly disable key-based access; best practices recommend RBAC-only data-plane authentication",
+    "Basic ACR SKU has a 10 GiB storage limit and no private link support — may be insufficient as custom inference images grow",
+    "Managed online endpoint and deployment resources are not included in the plan; these are typically created post-workspace via ML CLI/SDK but represent a gap in end-to-end provisioning"
+  ],
+  "correctionsRecommended": [
+    "Enable zone redundancy on the Cosmos DB location (set isZoneRedundant=true) for production high availability",
+    "Upgrade Storage Account SKU from Standard_LRS to Standard_ZRS for zone-resilient blob storage",
+    "Enable managed VNet isolation on the ML workspace (set managedNetwork.isolationMode to AllowInternetOutbound or AllowOnlyApprovedOutbound) and add private endpoints for Cosmos DB, Key Vault, and Storage",
+    "Disable local/key-based authentication on the Storage Account (set allowSharedKeyAccess=false) and Cosmos DB (set disableLocalAuth=true) to enforce RBAC-only access",
+    "Upgrade ACR to Standard or Premium SKU if image storage exceeds 10 GiB or if private link is required",
+    "Consider adding a second Cosmos DB read region for geo-redundancy and improved read latency",
+    "Add explicit Cosmos DB database and container resources to the plan for complete end-to-end provisioning"
+  ],
+  "hardDependencies": [],
+  "deployable": 1
+}

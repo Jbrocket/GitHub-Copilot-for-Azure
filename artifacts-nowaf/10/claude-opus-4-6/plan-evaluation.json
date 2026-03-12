@@ -1,0 +1,33 @@
+{
+  "overallScore": 0.86,
+  "dimensions": {
+    "goalAlignment": 0.95,
+    "wafConformance": 0.65,
+    "dependencyCompleteness": 0.93,
+    "deploymentViability": 0.9
+  },
+  "risks": [
+    "No managed identity configured on any resource — Function App and IoT Hub rely on connection strings rather than identity-based auth",
+    "ACR has adminUserEnabled: true — violates least-privilege; prefer managed identity for IoT Edge image pulls",
+    "All resources have publicNetworkAccess: Enabled with no VNet or private endpoint isolation",
+    "No Key Vault resource for secret management (connection strings, API keys, Twilio credentials)",
+    "Cosmos DB Serverless is single-region (eastus) with no failover — single point of failure for event storage",
+    "Storage Account uses Standard_LRS — no zone redundancy; risk of data loss in datacenter failure",
+    "Anomaly Detector container for IoT Edge is retiring October 2026 — need migration plan to custom ML model or ONNX Runtime",
+    "SMS delivery via Logic App requires third-party Twilio account or Azure Communication Services resource not included in plan",
+    "No diagnostic settings linking IoT Hub, Function App, or Cosmos DB to the Log Analytics workspace",
+    "Function App missing Application Insights for runtime monitoring and distributed tracing"
+  ],
+  "correctionsRecommended": [
+    "Add a User-Assigned Managed Identity resource and assign it to the Function App with RBAC roles: Storage Blob Data Owner, Storage Blob Data Contributor, Storage Queue Data Contributor, Storage Table Data Contributor, and Monitoring Metrics Publisher",
+    "Set adminUserEnabled: false on ACR and configure managed identity-based image pull for IoT Edge deployments",
+    "Add an Application Insights resource (Microsoft.Insights/components) connected to the Log Analytics workspace and wire it to the Function App via APPINSIGHTS_INSTRUMENTATIONKEY",
+    "Add Microsoft.Insights/diagnosticSettings resources for IoT Hub, Function App, Cosmos DB, and Logic App to send logs and metrics to the Log Analytics workspace",
+    "Add a Key Vault resource (Microsoft.KeyVault/vaults) to store IoT Hub connection strings, Cosmos DB keys, and Twilio API credentials",
+    "Disable storage account local auth (allowSharedKeyAccess: false) and use identity-based access per Azure best practices",
+    "Consider upgrading Storage SKU from Standard_LRS to Standard_ZRS for zone redundancy in production",
+    "Add an Azure Communication Services resource as an alternative to Twilio for SMS, keeping the solution Azure-native"
+  ],
+  "hardDependencies": [],
+  "deployable": 1
+}

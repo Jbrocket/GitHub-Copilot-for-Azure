@@ -1,0 +1,26 @@
+{
+  "overallScore": 0.88,
+  "dimensions": {
+    "goalAlignment": 0.92,
+    "wafConformance": 0.72,
+    "dependencyCompleteness": 0.95,
+    "deploymentViability": 0.93
+  },
+  "risks": [
+    "No network isolation — all resources use public network access (Key Vault, Storage, Cosmos DB, ML Workspace), increasing attack surface",
+    "Single-region deployment (eastus) with no geo-redundancy or availability zones; Cosmos DB isZoneRedundant is false",
+    "Storage account and Cosmos DB local auth (key access) not explicitly disabled — best practice recommends managed identity-only access",
+    "No resource tagging strategy defined for cost tracking, governance, or environment identification",
+    "Cosmos DB provisioned throughput requires upfront RU/s sizing — risk of under- or over-provisioning without autoscale configured at the container level"
+  ],
+  "correctionsRecommended": [
+    "Enable private endpoints for Key Vault, Storage Account, Cosmos DB, and ML Workspace to restrict public network exposure",
+    "Enable availability zones on Cosmos DB (set isZoneRedundant to true) for production-grade single-region resilience",
+    "Explicitly disable storage account key access (set allowSharedKeyAccess to false) and disable Cosmos DB key-based auth to enforce managed identity usage",
+    "Add resource tags (e.g., environment, project, costCenter) to all resources for governance and cost management",
+    "Configure Cosmos DB autoscale throughput at the database or container level to handle traffic spikes without manual RU/s sizing",
+    "Consider adding a secondary Cosmos DB region for disaster recovery if the workload grows to require multi-region availability"
+  ],
+  "hardDependencies": [],
+  "deployable": 1
+}

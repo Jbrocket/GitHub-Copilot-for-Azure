@@ -1,0 +1,398 @@
+{
+  "meta": {
+    "planId": "ecommerce-microservices-plan-001",
+    "generatedAt": "2026-03-11T13:11:03.252Z",
+    "version": "1.0.0",
+    "status": "draft"
+  },
+  "inputs": {
+    "userGoal": "Deploy a microservices-based e-commerce backend with independent catalog, order, and payment services, use AKS with Helm for deployments, and implement service mesh for traffic control"
+  },
+  "plan": {
+    "resources": [
+      {
+        "name": "rg-ecommerce-prod-001",
+        "type": "Microsoft.Resources/resourceGroups",
+        "subtype": "Resource Group",
+        "location": "eastus",
+        "sku": "N/A",
+        "properties": {
+          "tags": {
+            "Environment": "Production",
+            "Workload": "ECommerce",
+            "Owner": "Platform Team"
+          }
+        },
+        "reasoning": {
+          "whyChosen": "Central resource organization following CAF naming conventions. East US provides good latency for North American customers and has comprehensive Azure service availability.",
+          "alternativesConsidered": ["West US 2", "Central US"],
+          "tradeoffs": "East US selected for optimal cost-performance balance and proximity to target market"
+        },
+        "dependencies": [],
+        "references": [
+          {
+            "title": "Resource Group best practices",
+            "url": "https://learn.microsoft.com/azure/azure-resource-manager/management/manage-resource-groups-portal"
+          }
+        ]
+      },
+      {
+        "name": "vnet-ecommerce-prod-001",
+        "type": "Microsoft.Network/virtualNetworks",
+        "subtype": "Virtual Network",
+        "location": "eastus",
+        "sku": "N/A",
+        "properties": {
+          "addressSpace": {
+            "addressPrefixes": ["10.0.0.0/16"]
+          },
+          "subnets": [
+            {
+              "name": "aks-subnet",
+              "properties": {
+                "addressPrefix": "10.0.1.0/24"
+              }
+            },
+            {
+              "name": "app-gateway-subnet",
+              "properties": {
+                "addressPrefix": "10.0.2.0/24"
+              }
+            }
+          ]
+        },
+        "reasoning": {
+          "whyChosen": "Provides network isolation and security boundaries for microservices. CNI integration with AKS requires dedicated subnet.",
+          "alternativesConsidered": ["Smaller address space", "Multiple VNets"],
+          "tradeoffs": "/16 provides ample room for growth while maintaining simplicity"
+        },
+        "dependencies": ["rg-ecommerce-prod-001"],
+        "dependencyReasoning": "Must be created within the resource group",
+        "references": [
+          {
+            "title": "AKS networking concepts",
+            "url": "https://learn.microsoft.com/azure/aks/concepts-network"
+          }
+        ]
+      },
+      {
+        "name": "crecommerceprod001",
+        "type": "Microsoft.ContainerRegistry/registries",
+        "subtype": "Container Registry",
+        "location": "eastus",
+        "sku": "Premium",
+        "properties": {
+          "adminUserEnabled": false,
+          "publicNetworkAccess": "Enabled",
+          "zoneRedundancy": "Enabled",
+          "networkRuleBypassOptions": "AzureServices"
+        },
+        "reasoning": {
+          "whyChosen": "Premium SKU provides geo-replication, private link, zone redundancy, and customer-managed keys for production workloads. Managed identity integration eliminates credential management.",
+          "alternativesConsidered": ["Standard SKU"],
+          "tradeoffs": "Premium costs more but provides enterprise-grade features required for production microservices"
+        },
+        "dependencies": ["rg-ecommerce-prod-001"],
+        "dependencyReasoning": "Must be created within the resource group",
+        "references": [
+          {
+            "title": "ACR SKU comparison",
+            "url": "https://learn.microsoft.com/azure/container-registry/container-registry-skus"
+          }
+        ]
+      },
+      {
+        "name": "aks-ecommerce-prod-001",
+        "type": "Microsoft.ContainerService/managedClusters",
+        "subtype": "AKS Cluster",
+        "location": "eastus",
+        "sku": "Standard",
+        "properties": {
+          "dnsPrefix": "aks-ecommerce-prod-001",
+          "kubernetesVersion": "1.31",
+          "agentPoolProfiles": [
+            {
+              "name": "system",
+              "mode": "System",
+              "vmSize": "Standard_D4s_v5",
+              "count": 3,
+              "enableAutoScaling": true,
+              "minCount": 2,
+              "maxCount": 5,
+              "availabilityZones": ["1", "2", "3"],
+              "vnetSubnetID": "/subscriptions/{subscription-id}/resourceGroups/rg-ecommerce-prod-001/providers/Microsoft.Network/virtualNetworks/vnet-ecommerce-prod-001/subnets/aks-subnet"
+            },
+            {
+              "name": "apps",
+              "mode": "User", 
+              "vmSize": "Standard_D8s_v5",
+              "count": 3,
+              "enableAutoScaling": true,
+              "minCount": 2,
+              "maxCount": 10,
+              "availabilityZones": ["1", "2", "3"],
+              "vnetSubnetID": "/subscriptions/{subscription-id}/resourceGroups/rg-ecommerce-prod-001/providers/Microsoft.Network/virtualNetworks/vnet-ecommerce-prod-001/subnets/aks-subnet"
+            }
+          ],
+          "networkProfile": {
+            "networkPlugin": "azure",
+            "networkPolicy": "cilium",
+            "serviceCidr": "10.1.0.0/16",
+            "dnsServiceIP": "10.1.0.10"
+          },
+          "addonProfiles": {
+            "azureKeyvaultSecretsProvider": {
+              "enabled": true
+            },
+            "omsagent": {
+              "enabled": true
+            }
+          },
+          "identity": {
+            "type": "SystemAssigned"
+          }
+        },
+        "reasoning": {
+          "whyChosen": "Standard SKU provides 99.95% SLA. Separate system and user node pools for workload isolation. Azure CNI with Cilium provides advanced networking and security. Zone redundancy ensures high availability.",
+          "alternativesConsidered": ["Free tier", "Premium SKU", "Single node pool"],
+          "tradeoffs": "Standard tier balances cost and SLA requirements. Cilium provides eBPF-based networking for better performance"
+        },
+        "dependencies": ["rg-ecommerce-prod-001", "vnet-ecommerce-prod-001"],
+        "dependencyReasoning": "Requires VNet subnet for Azure CNI networking integration",
+        "references": [
+          {
+            "title": "AKS cluster configuration",
+            "url": "https://learn.microsoft.com/azure/aks/cluster-configuration"
+          }
+        ]
+      },
+      {
+        "name": "sqlsrv-ecommerce-prod-001",
+        "type": "Microsoft.Sql/servers",
+        "subtype": "SQL Server",
+        "location": "eastus",
+        "sku": "N/A",
+        "properties": {
+          "administratorLogin": "sqladmin",
+          "publicNetworkAccess": "Enabled",
+          "minimalTlsVersion": "1.2",
+          "administrators": {
+            "administratorType": "ActiveDirectory",
+            "principalType": "Group"
+          }
+        },
+        "reasoning": {
+          "whyChosen": "Centralized SQL Server for all microservice databases with AAD integration for secure access management.",
+          "alternativesConsidered": ["Separate servers per microservice", "PostgreSQL"],
+          "tradeoffs": "Single server reduces management overhead while maintaining logical separation via databases"
+        },
+        "dependencies": ["rg-ecommerce-prod-001"],
+        "dependencyReasoning": "Must be created within the resource group",
+        "references": [
+          {
+            "title": "Azure SQL Server configuration",
+            "url": "https://learn.microsoft.com/azure/azure-sql/database/logical-servers"
+          }
+        ]
+      },
+      {
+        "name": "sqldb-catalog-prod-001",
+        "type": "Microsoft.Sql/servers/databases",
+        "subtype": "SQL Database",
+        "location": "eastus",
+        "sku": "GP_S_Gen5_2",
+        "properties": {
+          "createMode": "Default",
+          "licenseType": "LicenseIncluded",
+          "requestedBackupStorageRedundancy": "GeoZone",
+          "zoneRedundant": true,
+          "autoPauseDelay": 60,
+          "minCapacity": 0.5
+        },
+        "reasoning": {
+          "whyChosen": "Serverless General Purpose provides cost-effective scaling for catalog microservice with automatic pause/resume capabilities.",
+          "alternativesConsidered": ["Provisioned compute", "Basic tier"],
+          "tradeoffs": "Serverless has cold start latency but provides significant cost savings during low usage periods"
+        },
+        "dependencies": ["sqlsrv-ecommerce-prod-001"],
+        "dependencyReasoning": "Must be created within the SQL Server",
+        "references": [
+          {
+            "title": "Azure SQL Database serverless",
+            "url": "https://learn.microsoft.com/azure/azure-sql/database/serverless-tier-overview"
+          }
+        ]
+      },
+      {
+        "name": "sqldb-orders-prod-001",
+        "type": "Microsoft.Sql/servers/databases",
+        "subtype": "SQL Database",
+        "location": "eastus",
+        "sku": "GP_Gen5_4",
+        "properties": {
+          "createMode": "Default",
+          "licenseType": "LicenseIncluded",
+          "requestedBackupStorageRedundancy": "GeoZone",
+          "zoneRedundant": true
+        },
+        "reasoning": {
+          "whyChosen": "Provisioned General Purpose for consistent performance needed for order processing transactions.",
+          "alternativesConsidered": ["Serverless", "Business Critical"],
+          "tradeoffs": "Provisioned ensures consistent performance for transactional workloads"
+        },
+        "dependencies": ["sqlsrv-ecommerce-prod-001"],
+        "dependencyReasoning": "Must be created within the SQL Server",
+        "references": [
+          {
+            "title": "Azure SQL Database purchasing models",
+            "url": "https://learn.microsoft.com/azure/azure-sql/database/purchasing-models"
+          }
+        ]
+      },
+      {
+        "name": "sqldb-payments-prod-001",
+        "type": "Microsoft.Sql/servers/databases",
+        "subtype": "SQL Database", 
+        "location": "eastus",
+        "sku": "BC_Gen5_2",
+        "properties": {
+          "createMode": "Default",
+          "licenseType": "LicenseIncluded",
+          "requestedBackupStorageRedundancy": "GeoZone",
+          "zoneRedundant": true
+        },
+        "reasoning": {
+          "whyChosen": "Business Critical tier provides read replicas and enhanced security for sensitive payment data processing.",
+          "alternativesConsidered": ["General Purpose"],
+          "tradeoffs": "Higher cost justified by security and compliance requirements for payment processing"
+        },
+        "dependencies": ["sqlsrv-ecommerce-prod-001"],
+        "dependencyReasoning": "Must be created within the SQL Server",
+        "references": [
+          {
+            "title": "Azure SQL Business Critical tier",
+            "url": "https://learn.microsoft.com/azure/azure-sql/database/service-tier-business-critical"
+          }
+        ]
+      },
+      {
+        "name": "redis-ecommerce-prod-001",
+        "type": "Microsoft.Cache/Redis",
+        "subtype": "Redis Cache",
+        "location": "eastus",
+        "sku": "Premium",
+        "properties": {
+          "capacity": 1,
+          "family": "P",
+          "enableNonSslPort": false,
+          "minimumTlsVersion": "1.2",
+          "redisConfiguration": {
+            "maxclients": "1000"
+          }
+        },
+        "reasoning": {
+          "whyChosen": "Premium Redis provides persistence, clustering, and VNet integration for session state and caching across microservices.",
+          "alternativesConsidered": ["Standard tier", "Basic tier"],
+          "tradeoffs": "Premium costs more but provides enterprise features needed for production caching"
+        },
+        "dependencies": ["rg-ecommerce-prod-001"],
+        "dependencyReasoning": "Must be created within the resource group",
+        "references": [
+          {
+            "title": "Azure Cache for Redis tiers",
+            "url": "https://learn.microsoft.com/azure/azure-cache-for-redis/cache-overview"
+          }
+        ]
+      },
+      {
+        "name": "kv-ecommerce-prod-001",
+        "type": "Microsoft.KeyVault/vaults",
+        "subtype": "Key Vault",
+        "location": "eastus",
+        "sku": "Standard",
+        "properties": {
+          "enabledForDeployment": false,
+          "enabledForTemplateDeployment": true,
+          "enabledForDiskEncryption": false,
+          "enableSoftDelete": true,
+          "enablePurgeProtection": true,
+          "softDeleteRetentionInDays": 90,
+          "enableRbacAuthorization": true
+        },
+        "reasoning": {
+          "whyChosen": "Centralized secrets management for database connection strings, API keys, and certificates used by microservices.",
+          "alternativesConsidered": ["Premium HSM", "Multiple key vaults"],
+          "tradeoffs": "Standard tier sufficient for software-protected keys while maintaining security best practices"
+        },
+        "dependencies": ["rg-ecommerce-prod-001"],
+        "dependencyReasoning": "Must be created within the resource group",
+        "references": [
+          {
+            "title": "Azure Key Vault overview",
+            "url": "https://learn.microsoft.com/azure/key-vault/general/overview"
+          }
+        ]
+      },
+      {
+        "name": "appgw-ecommerce-prod-001",
+        "type": "Microsoft.Network/applicationGateways",
+        "subtype": "Application Gateway",
+        "location": "eastus",
+        "sku": "Standard_v2",
+        "properties": {
+          "tier": "Standard_v2",
+          "capacity": 2,
+          "autoscaleConfiguration": {
+            "minCapacity": 2,
+            "maxCapacity": 10
+          },
+          "webApplicationFirewall": {
+            "enabled": true,
+            "firewallMode": "Prevention",
+            "ruleSetType": "OWASP",
+            "ruleSetVersion": "3.2"
+          }
+        },
+        "reasoning": {
+          "whyChosen": "Application Gateway v2 provides L7 load balancing, SSL termination, and WAF protection for incoming traffic to microservices.",
+          "alternativesConsidered": ["Load Balancer", "Azure Front Door"],
+          "tradeoffs": "Regional solution provides lower latency than Front Door while offering advanced L7 features"
+        },
+        "dependencies": ["rg-ecommerce-prod-001", "vnet-ecommerce-prod-001"],
+        "dependencyReasoning": "Requires dedicated subnet in VNet for deployment",
+        "references": [
+          {
+            "title": "Application Gateway overview",
+            "url": "https://learn.microsoft.com/azure/application-gateway/overview"
+          }
+        ]
+      }
+    ],
+    "overallReasoning": {
+      "summary": "Architecture implements a microservices pattern on AKS with Istio service mesh for advanced traffic management, security, and observability. Each microservice (catalog, orders, payments) has dedicated databases optimized for their specific requirements. Container Registry provides secure image storage, while Redis enables distributed caching and session state. Key Vault centralizes secrets management, and Application Gateway provides secure ingress with WAF protection.",
+      "tradeoffs": "Premium/Standard tiers selected balance production requirements with cost efficiency. Istio service mesh adds complexity but provides essential microservices capabilities like mTLS, traffic splitting, and observability. Single SQL Server reduces management overhead while maintaining logical separation via databases."
+    },
+    "validation": "All resources are properly sized for production workloads with high availability across availability zones. Service mesh integration provides the traffic control and security required for microservices communication. Helm deployment strategy supported through AKS native integration.",
+    "architecturePrinciples": [
+      "High Availability",
+      "Security by Design", 
+      "Cost Optimization",
+      "Operational Excellence",
+      "Microservices Isolation"
+    ],
+    "references": [
+      {
+        "title": "Microservices architecture on AKS",
+        "url": "https://learn.microsoft.com/azure/architecture/reference-architectures/containers/aks-microservices/aks-microservices"
+      },
+      {
+        "title": "Istio service mesh for AKS",
+        "url": "https://learn.microsoft.com/azure/aks/istio-about"
+      },
+      {
+        "title": "Well-Architected Framework",
+        "url": "https://learn.microsoft.com/azure/well-architected/"
+      }
+    ]
+  }
+}

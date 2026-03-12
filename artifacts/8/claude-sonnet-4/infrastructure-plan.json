@@ -1,0 +1,245 @@
+{
+  "meta": {
+    "planId": "plan-ml-recommendation-engine",
+    "generatedAt": "2026-03-11T13:11:03.189Z",
+    "version": "0.1-draft",
+    "status": "draft"
+  },
+  "inputs": {
+    "userGoal": "Deploy a real-time recommendation engine as an Azure ML managed online endpoint, scale for high request volumes, and store usage activity in Cosmos DB. Assume all defaults to make the plan."
+  },
+  "plan": {
+    "resources": [
+      {
+        "name": "st-mlrecsys-prod-001",
+        "type": "Microsoft.Storage/storageAccounts",
+        "subtype": "General Purpose v2",
+        "location": "eastus",
+        "sku": "Standard_LRS",
+        "properties": {
+          "kind": "StorageV2",
+          "accessTier": "Hot",
+          "allowBlobPublicAccess": false,
+          "supportsHttpsTrafficOnly": true,
+          "minimumTlsVersion": "TLS1_2"
+        },
+        "reasoning": {
+          "whyChosen": "Required dependency for Azure ML workspace. Storage account provides blob storage for datasets, models, and logs. Standard_LRS provides cost-effective local redundancy suitable for ML workloads.",
+          "alternativesConsidered": ["Standard_GRS for geo-redundancy", "Premium_LRS for high performance"],
+          "tradeoffs": "Standard_LRS balances cost and performance. No geo-redundancy but acceptable for ML artifacts that can be recreated."
+        },
+        "dependencies": [],
+        "references": [
+          {
+            "title": "Storage Account Overview",
+            "url": "https://learn.microsoft.com/azure/storage/common/storage-account-overview"
+          }
+        ]
+      },
+      {
+        "name": "kv-mlrecsys-prod-001",
+        "type": "Microsoft.KeyVault/vaults",
+        "subtype": "Standard Key Vault",
+        "location": "eastus",
+        "sku": "standard",
+        "properties": {
+          "enableSoftDelete": true,
+          "softDeleteRetentionInDays": 90,
+          "enablePurgeProtection": true
+        },
+        "reasoning": {
+          "whyChosen": "Required dependency for Azure ML workspace. Stores encryption keys, secrets, and certificates. Standard SKU meets requirements for ML workspace integration.",
+          "alternativesConsidered": ["Premium SKU for HSM-backed keys"],
+          "tradeoffs": "Standard tier sufficient for ML workspace requirements. Premium adds HSM support at higher cost."
+        },
+        "dependencies": [],
+        "references": [
+          {
+            "title": "Key Vault Overview",
+            "url": "https://learn.microsoft.com/azure/key-vault/general/overview"
+          }
+        ]
+      },
+      {
+        "name": "appi-mlrecsys-prod-001",
+        "type": "Microsoft.Insights/components",
+        "subtype": "Application Insights",
+        "location": "eastus",
+        "sku": "Basic",
+        "properties": {
+          "applicationType": "web",
+          "kind": "web"
+        },
+        "reasoning": {
+          "whyChosen": "Required dependency for Azure ML workspace. Provides monitoring, logging, and diagnostics for ML endpoints. Web type suitable for HTTP endpoint monitoring.",
+          "alternativesConsidered": ["Workspace-based Application Insights"],
+          "tradeoffs": "Basic tier provides essential monitoring capabilities. Workspace-based offers advanced analytics at higher cost."
+        },
+        "dependencies": [],
+        "references": [
+          {
+            "title": "Application Insights Overview",
+            "url": "https://learn.microsoft.com/azure/azure-monitor/app/app-insights-overview"
+          }
+        ]
+      },
+      {
+        "name": "mlw-recsys-prod-001",
+        "type": "Microsoft.MachineLearningServices/workspaces",
+        "subtype": "Standard ML Workspace",
+        "location": "eastus",
+        "sku": "Basic",
+        "properties": {
+          "friendlyName": "Recommendation System ML Workspace",
+          "description": "ML workspace for recommendation engine model deployment and management"
+        },
+        "reasoning": {
+          "whyChosen": "Core service for deploying and managing ML models as managed online endpoints. Provides model registry, deployment automation, and endpoint management. Basic SKU sufficient for production workloads.",
+          "alternativesConsidered": ["Standard SKU for additional features"],
+          "tradeoffs": "Basic tier provides essential ML capabilities. Standard offers advanced features like private link at higher cost."
+        },
+        "dependencies": ["st-mlrecsys-prod-001", "kv-mlrecsys-prod-001", "appi-mlrecsys-prod-001"],
+        "dependencyReasoning": "ML workspace requires linked storage account for artifacts, Key Vault for secrets management, and Application Insights for monitoring.",
+        "references": [
+          {
+            "title": "Azure Machine Learning Workspace Overview",
+            "url": "https://learn.microsoft.com/azure/machine-learning/concept-workspace"
+          }
+        ]
+      },
+      {
+        "name": "ml-endpoint-recsys-prod",
+        "type": "Microsoft.MachineLearningServices/workspaces/onlineEndpoints",
+        "subtype": "Managed Online Endpoint",
+        "location": "eastus",
+        "sku": "Standard_DS3_v2",
+        "properties": {
+          "authMode": "Key",
+          "description": "Real-time recommendation engine endpoint for high-volume inference",
+          "trafficPercentage": 100
+        },
+        "reasoning": {
+          "whyChosen": "Provides managed, scalable real-time inference for recommendation models. Standard_DS3_v2 offers good CPU/memory balance for recommendation workloads. Auto-scaling enables handling variable request volumes.",
+          "alternativesConsidered": ["Standard_DS2_v2 for lower cost", "GPU SKUs for complex models"],
+          "tradeoffs": "Standard_DS3_v2 balances performance and cost. Can scale horizontally for high volumes. GPU SKUs would increase cost significantly."
+        },
+        "dependencies": ["mlw-recsys-prod-001"],
+        "dependencyReasoning": "Online endpoints must be deployed within an ML workspace.",
+        "references": [
+          {
+            "title": "Azure ML Online Endpoints",
+            "url": "https://learn.microsoft.com/azure/machine-learning/concept-endpoints-online"
+          }
+        ]
+      },
+      {
+        "name": "cosmos-recsys-prod-001",
+        "type": "Microsoft.DocumentDB/databaseAccounts",
+        "subtype": "NoSQL API",
+        "location": "eastus",
+        "sku": "Standard",
+        "properties": {
+          "kind": "GlobalDocumentDB",
+          "databaseAccountOfferType": "Standard",
+          "consistencyPolicy": {
+            "defaultConsistencyLevel": "Session"
+          },
+          "enableAutomaticFailover": true,
+          "enableMultipleWriteLocations": false,
+          "enableFreeTier": false
+        },
+        "reasoning": {
+          "whyChosen": "Ideal for storing usage activity data with high throughput and low latency requirements. Session consistency balances performance and data consistency. Auto-failover ensures high availability.",
+          "alternativesConsidered": ["Azure SQL Database", "Azure Table Storage"],
+          "tradeoffs": "Cosmos DB provides better scalability and global distribution than SQL Database. Higher cost than Table Storage but offers superior query capabilities and performance."
+        },
+        "dependencies": [],
+        "references": [
+          {
+            "title": "Azure Cosmos DB Overview",
+            "url": "https://learn.microsoft.com/azure/cosmos-db/introduction"
+          }
+        ]
+      },
+      {
+        "name": "cosmos-recsys-db",
+        "type": "Microsoft.DocumentDB/databaseAccounts/sqlDatabases",
+        "subtype": "NoSQL Database",
+        "location": "eastus",
+        "sku": "Autoscale",
+        "properties": {
+          "throughputPolicy": "Autoscale",
+          "maxThroughput": 4000
+        },
+        "reasoning": {
+          "whyChosen": "Database to organize usage activity collections. Autoscale throughput automatically adjusts to demand patterns, optimizing cost while handling traffic spikes.",
+          "alternativesConsidered": ["Fixed provisioned throughput"],
+          "tradeoffs": "Autoscale costs more per RU but provides automatic scaling. Better for variable workloads than fixed provisioning."
+        },
+        "dependencies": ["cosmos-recsys-prod-001"],
+        "dependencyReasoning": "Database must be created within the Cosmos DB account.",
+        "references": [
+          {
+            "title": "Cosmos DB Autoscale Throughput",
+            "url": "https://learn.microsoft.com/azure/cosmos-db/autoscale-throughput"
+          }
+        ]
+      },
+      {
+        "name": "cosmos-recsys-usage-container",
+        "type": "Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers",
+        "subtype": "NoSQL Container",
+        "location": "eastus",
+        "sku": "Autoscale",
+        "properties": {
+          "partitionKey": "/userId",
+          "throughputPolicy": "Autoscale",
+          "maxThroughput": 4000,
+          "indexingPolicy": {
+            "automatic": true,
+            "indexingMode": "Consistent"
+          }
+        },
+        "reasoning": {
+          "whyChosen": "Container to store user interaction and usage activity data. Partitioned by userId for optimal distribution. Consistent indexing ensures query performance for real-time analytics.",
+          "alternativesConsidered": ["Partition by timestamp", "Partition by itemId"],
+          "tradeoffs": "UserId partitioning provides good distribution for user-centric queries. May create hot partitions for highly active users but generally well-distributed."
+        },
+        "dependencies": ["cosmos-recsys-db"],
+        "dependencyReasoning": "Container must be created within the database.",
+        "references": [
+          {
+            "title": "Cosmos DB Partitioning",
+            "url": "https://learn.microsoft.com/azure/cosmos-db/partitioning-overview"
+          }
+        ]
+      }
+    ],
+    "overallReasoning": {
+      "summary": "Architecture provides a scalable real-time recommendation system using Azure ML managed endpoints for inference and Cosmos DB for activity storage. ML workspace manages model lifecycle and endpoint deployment. Auto-scaling capabilities handle variable request volumes.",
+      "tradeoffs": "Balanced cost and performance by using Standard/Basic SKUs where appropriate. Autoscale features increase cost but provide automatic capacity management. Session consistency in Cosmos DB trades some consistency for better performance."
+    },
+    "validation": "All resources are properly configured with required dependencies. ML workspace has all required linked services. Online endpoint configured for auto-scaling. Cosmos DB configured with appropriate partitioning and consistency for usage tracking workload.",
+    "architecturePrinciples": [
+      "Highly scalable",
+      "Real-time performance", 
+      "Cost optimized",
+      "Fully managed services",
+      "Auto-scaling enabled"
+    ],
+    "references": [
+      {
+        "title": "Azure ML Online Endpoints Architecture",
+        "url": "https://learn.microsoft.com/azure/machine-learning/concept-endpoints-online"
+      },
+      {
+        "title": "Cosmos DB Real-time Applications",
+        "url": "https://learn.microsoft.com/azure/cosmos-db/use-cases"
+      },
+      {
+        "title": "Azure ML Autoscaling",
+        "url": "https://learn.microsoft.com/azure/machine-learning/how-to-autoscale-endpoints"
+      }
+    ]
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "overallScore": 0.89,
+  "dimensions": {
+    "goalAlignment": 0.95,
+    "wafConformance": 0.72,
+    "dependencyCompleteness": 0.95,
+    "deploymentViability": 0.93
+  },
+  "risks": [
+    "Public network access is enabled on both Service Bus namespace and Cosmos DB account — no network isolation is configured, leaving data-plane endpoints exposed to the internet.",
+    "ACA environment has no VNet integration — WAF recommends deploying Container Apps environments into a virtual network for network segmentation and egress control.",
+    "Container app processor has external ingress enabled but functions as an event-driven consumer via Dapr pub/sub — this exposes an unnecessary public HTTP endpoint and increases the attack surface.",
+    "No Azure Key Vault resource is included for secrets management — best practices recommend storing sensitive configuration (e.g., connection strings, keys) in Key Vault rather than in app configuration.",
+    "Zone redundancy is disabled on the ACA environment (zoneRedundant: false) — a single availability zone failure could impact the processing pipeline.",
+    "No explicit RBAC role assignment resources are defined for the container app's managed identity to access Service Bus and Cosmos DB data planes."
+  ],
+  "correctionsRecommended": [
+    "Add VNet integration for the ACA environment and switch the container app processor ingress from external to internal, since it consumes events via Dapr rather than inbound HTTP traffic.",
+    "Configure private endpoints or disable public network access on the Service Bus namespace and Cosmos DB account to restrict data-plane access to the virtual network.",
+    "Add an Azure Key Vault resource (Microsoft.KeyVault/vaults) and reference it for secrets management in the container app, replacing any inline secret configuration.",
+    "Add Microsoft.Authorization/roleAssignments resources to grant the container app's system-assigned managed identity the 'Azure Service Bus Data Receiver' role on the Service Bus subscription and the 'Cosmos DB Built-in Data Contributor' role on the Cosmos DB account.",
+    "Consider enabling zone redundancy (zoneRedundant: true) on the ACA environment for production-grade reliability.",
+    "Consider switching the container app to a user-assigned managed identity to enable pre-authorization and identity reuse across resources, as recommended by ACA IaC deployment rules."
+  ],
+  "hardDependencies": [],
+  "deployable": 1
+}

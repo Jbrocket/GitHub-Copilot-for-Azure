@@ -1,0 +1,35 @@
+{
+  "overallScore": 0.78,
+  "dimensions": {
+    "goalAlignment": 0.82,
+    "wafConformance": 0.58,
+    "dependencyCompleteness": 0.85,
+    "deploymentViability": 0.88
+  },
+  "risks": [
+    "No Microsoft.Insights/autoscaleSettings resource defined for the VMSS despite the user goal explicitly requesting autoscaling",
+    "No NSG resources defined for any subnet; SQL Managed Instance requires an NSG on its delegated subnet (service-aided configuration can auto-create, but explicit definition is recommended)",
+    "No route table resource for the SQL MI subnet; SQL MI connectivity architecture requires an associated route table",
+    "No load balancer resource for the VMSS presentation tier, limiting traffic distribution and health probing",
+    "UbuntuServer 18.04-LTS image is end-of-life (April 2023) and may be unavailable or unsupported in the marketplace",
+    "No availability zones configured for VMs or VMSS, reducing resilience against datacenter failures",
+    "SQL MI uses SQL authentication (administratorLogin) without Microsoft Entra ID authentication configured",
+    "No monitoring or diagnostics resources (Log Analytics workspace, Application Insights) included in the plan",
+    "No Key Vault resource for secrets management; admin credentials are defined inline",
+    "Application tier VMs have no load balancer or availability set, limiting high-availability guarantees"
+  ],
+  "correctionsRecommended": [
+    "Add a Microsoft.Insights/autoscaleSettings resource targeting the VMSS with CPU-based or schedule-based scaling rules",
+    "Add Microsoft.Network/networkSecurityGroups resources for each subnet with appropriate inbound/outbound rules",
+    "Add a Microsoft.Network/routeTables resource associated with the SQL MI subnet",
+    "Add a Microsoft.Network/loadBalancers (Standard SKU) in front of the VMSS for the presentation tier",
+    "Update the VM image reference from UbuntuServer 18.04-LTS to a supported version such as 0001-com-ubuntu-server-jammy 22_04-lts-gen2",
+    "Configure availability zones for the VMSS and application-tier VMs to improve fault tolerance",
+    "Add a Microsoft.OperationalInsights/workspaces resource and Microsoft.Insights/components for centralized monitoring",
+    "Add a Microsoft.KeyVault/vaults resource and reference it for SQL MI admin credentials and other secrets",
+    "Consider adding a load balancer or availability set for the application-tier VMs",
+    "Consider enabling Microsoft Entra ID authentication for SQL Managed Instance alongside SQL authentication"
+  ],
+  "hardDependencies": [],
+  "deployable": 1
+}

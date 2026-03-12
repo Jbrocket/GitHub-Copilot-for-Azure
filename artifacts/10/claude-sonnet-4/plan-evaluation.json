@@ -1,0 +1,32 @@
+{
+  "overallScore": 0.83,
+  "dimensions": {
+    "goalAlignment": 0.92,
+    "wafConformance": 0.6,
+    "dependencyCompleteness": 0.88,
+    "deploymentViability": 0.92
+  },
+  "risks": [
+    "NSG SSH rule allows inbound from all sources (sourceAddressPrefix: *), exposing port 22 to the public internet",
+    "VM uses password authentication (disablePasswordAuthentication: false) instead of SSH key-based auth",
+    "Cosmos DB has automatic failover disabled (enableAutomaticFailover: false) in a single-region deployment, risking write unavailability during outages",
+    "All public-facing services (IoT Hub, Cosmos DB, Cognitive Services, Key Vault) have publicNetworkAccess set to Enabled without private endpoints",
+    "Key Vault purge protection is disabled (enablePurgeProtection: false), risking permanent and irrecoverable secret deletion",
+    "No monitoring or diagnostics resources (Log Analytics workspace, Application Insights) included for operational visibility",
+    "Single-region deployment with no geo-redundancy or availability zone configuration for any resource",
+    "No managed identity resources defined for secure service-to-service authentication between VM, Logic App, IoT Hub, and Cosmos DB"
+  ],
+  "correctionsRecommended": [
+    "Restrict NSG SSH rule sourceAddressPrefix to specific trusted IP ranges or a bastion subnet instead of wildcard *",
+    "Set VM osProfile.linuxConfiguration.disablePasswordAuthentication to true and provision SSH public keys",
+    "Enable Cosmos DB automatic failover (enableAutomaticFailover: true) and consider adding a secondary read region",
+    "Enable Key Vault purge protection (enablePurgeProtection: true) per Azure best practices",
+    "Add Log Analytics workspace and Application Insights resources for centralized monitoring and diagnostics",
+    "Add private endpoints for IoT Hub, Cosmos DB, Key Vault, and Cognitive Services to restrict network access",
+    "Add user-assigned or system-assigned managed identity for the VM and Logic App to eliminate credential-based access",
+    "Add a Network Interface (NIC) resource explicitly for the VM to clarify subnet and NSG association",
+    "Consider adding a second Cosmos DB region and enabling availability zones for production reliability"
+  ],
+  "hardDependencies": [],
+  "deployable": 1
+}

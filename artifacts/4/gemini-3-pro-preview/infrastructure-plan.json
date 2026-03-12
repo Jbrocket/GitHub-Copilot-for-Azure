@@ -1,0 +1,335 @@
+{
+  "meta": {
+    "planId": "plan-azure-infra-001",
+    "generatedAt": "2026-03-11T13:18:30Z",
+    "version": "1.0",
+    "status": "draft"
+  },
+  "inputs": {
+    "userGoal": "Plan Azure infrastructure: Configure an autoscaled VMSS-based presentation tier, application servers in separate subnet, and encrypted SQL Managed Instance as the backend database. Assume all defaults."
+  },
+  "plan": {
+    "resources": [
+      {
+        "name": "vnet-app-prod-eastus",
+        "type": "Microsoft.Network/virtualNetworks",
+        "subtype": "Virtual Network",
+        "location": "eastus",
+        "sku": "Standard",
+        "properties": {
+          "addressSpace": {
+            "addressPrefixes": [
+              "10.0.0.0/16"
+            ]
+          }
+        },
+        "reasoning": {
+          "whyChosen": "Provides network isolation and segmentation for the multi-tier architecture.",
+          "alternativesConsidered": [
+            "Hub-spoke topology"
+          ],
+          "tradeoffs": "Single VNet is simpler but less scalable for large enterprises than hub-spoke."
+        },
+        "dependencies": [],
+        "references": []
+      },
+      {
+        "name": "snet-presentation-prod-eastus",
+        "type": "Microsoft.Network/virtualNetworks/subnets",
+        "subtype": "Subnet",
+        "location": "eastus",
+        "sku": "Standard",
+        "properties": {
+          "addressPrefix": "10.0.1.0/24"
+        },
+        "reasoning": {
+          "whyChosen": "Dedicated subnet for the presentation tier (VMSS) to control traffic flow.",
+          "alternativesConsidered": [
+            "Shared subnet"
+          ],
+          "tradeoffs": "Segmentation increases management overhead but improves security."
+        },
+        "dependencies": [
+          "vnet-app-prod-eastus"
+        ],
+        "references": []
+      },
+      {
+        "name": "snet-application-prod-eastus",
+        "type": "Microsoft.Network/virtualNetworks/subnets",
+        "subtype": "Subnet",
+        "location": "eastus",
+        "sku": "Standard",
+        "properties": {
+          "addressPrefix": "10.0.2.0/24"
+        },
+        "reasoning": {
+          "whyChosen": "Dedicated subnet for application servers to isolate business logic.",
+          "alternativesConsidered": [],
+          "tradeoffs": "Requires NSG rules to allow traffic from presentation tier."
+        },
+        "dependencies": [
+          "vnet-app-prod-eastus"
+        ],
+        "references": []
+      },
+      {
+        "name": "snet-database-prod-eastus",
+        "type": "Microsoft.Network/virtualNetworks/subnets",
+        "subtype": "Subnet",
+        "location": "eastus",
+        "sku": "Standard",
+        "properties": {
+          "addressPrefix": "10.0.3.0/24",
+          "delegations": [
+            {
+              "name": "managedInstanceDelegation",
+              "properties": {
+                "serviceName": "Microsoft.Sql/managedInstances"
+              }
+            }
+          ]
+        },
+        "reasoning": {
+          "whyChosen": "Dedicated subnet required by SQL Managed Instance for network isolation.",
+          "alternativesConsidered": [],
+          "tradeoffs": "SQL MI requires a dedicated subnet and takes longer to provision."
+        },
+        "dependencies": [
+          "vnet-app-prod-eastus"
+        ],
+        "references": []
+      },
+      {
+        "name": "vmss-web-prod-eastus",
+        "type": "Microsoft.Compute/virtualMachineScaleSets",
+        "subtype": "Virtual Machine Scale Set",
+        "location": "eastus",
+        "sku": "Standard_DS1_v2",
+        "properties": {
+          "orchestrationMode": "Flexible",
+          "upgradePolicy": {
+            "mode": "Automatic"
+          },
+          "virtualMachineProfile": {
+            "networkProfile": {
+              "networkInterfaceConfigurations": [
+                {
+                  "name": "nic",
+                  "properties": {
+                    "primary": true,
+                    "ipConfigurations": [
+                      {
+                        "name": "ipconfig",
+                        "properties": {
+                          "subnet": {
+                            "id": "snet-presentation-prod-eastus"
+                          }
+                        }
+                      }
+                    ]
+                  }
+                }
+              ]
+            },
+            "osProfile": {
+              "computerNamePrefix": "vmss-web",
+              "adminUsername": "azureuser"
+            },
+            "storageProfile": {
+              "imageReference": {
+                "publisher": "Canonical",
+                "offer": "UbuntuServer",
+                "sku": "18.04-LTS",
+                "version": "latest"
+              }
+            }
+          }
+        },
+        "reasoning": {
+          "whyChosen": "VMSS allows autoscaling for the presentation tier to handle varying load.",
+          "alternativesConsidered": [
+            "App Service"
+          ],
+          "tradeoffs": "VMSS requires more management than App Service but offers more control."
+        },
+        "dependencies": [
+          "snet-presentation-prod-eastus"
+        ],
+        "references": []
+      },
+      {
+        "name": "nic-app-01",
+        "type": "Microsoft.Network/networkInterfaces",
+        "subtype": "Network Interface",
+        "location": "eastus",
+        "sku": "Standard",
+        "properties": {
+          "ipConfigurations": [
+            {
+              "name": "ipconfig1",
+              "properties": {
+                "subnet": {
+                  "id": "snet-application-prod-eastus"
+                }
+              }
+            }
+          ]
+        },
+        "reasoning": {
+          "whyChosen": "Network interface for VM 1.",
+          "alternativesConsidered": [],
+          "tradeoffs": ""
+        },
+        "dependencies": [
+          "snet-application-prod-eastus"
+        ],
+        "references": []
+      },
+      {
+        "name": "nic-app-02",
+        "type": "Microsoft.Network/networkInterfaces",
+        "subtype": "Network Interface",
+        "location": "eastus",
+        "sku": "Standard",
+        "properties": {
+          "ipConfigurations": [
+            {
+              "name": "ipconfig1",
+              "properties": {
+                "subnet": {
+                  "id": "snet-application-prod-eastus"
+                }
+              }
+            }
+          ]
+        },
+        "reasoning": {
+          "whyChosen": "Network interface for VM 2.",
+          "alternativesConsidered": [],
+          "tradeoffs": ""
+        },
+        "dependencies": [
+          "snet-application-prod-eastus"
+        ],
+        "references": []
+      },
+      {
+        "name": "vm-app-prod-01",
+        "type": "Microsoft.Compute/virtualMachines",
+        "subtype": "Virtual Machine",
+        "location": "eastus",
+        "sku": "Standard_DS1_v2",
+        "properties": {
+          "hardwareProfile": {
+            "vmSize": "Standard_DS1_v2"
+          },
+          "storageProfile": {
+            "imageReference": {
+              "publisher": "Canonical",
+              "offer": "UbuntuServer",
+              "sku": "18.04-LTS",
+              "version": "latest"
+            },
+            "osDisk": {
+              "createOption": "FromImage"
+            }
+          },
+          "networkProfile": {
+            "networkInterfaces": [
+              {
+                "id": "nic-app-01"
+              }
+            ]
+          }
+        },
+        "reasoning": {
+          "whyChosen": "Dedicated application server for business logic processing.",
+          "alternativesConsidered": [
+            "Containers"
+          ],
+          "tradeoffs": "VMs have higher overhead than containers."
+        },
+        "dependencies": [
+          "nic-app-01"
+        ],
+        "references": []
+      },
+      {
+        "name": "vm-app-prod-02",
+        "type": "Microsoft.Compute/virtualMachines",
+        "subtype": "Virtual Machine",
+        "location": "eastus",
+        "sku": "Standard_DS1_v2",
+        "properties": {
+          "hardwareProfile": {
+            "vmSize": "Standard_DS1_v2"
+          },
+          "storageProfile": {
+            "imageReference": {
+              "publisher": "Canonical",
+              "offer": "UbuntuServer",
+              "sku": "18.04-LTS",
+              "version": "latest"
+            },
+            "osDisk": {
+              "createOption": "FromImage"
+            }
+          },
+          "networkProfile": {
+            "networkInterfaces": [
+              {
+                "id": "nic-app-02"
+              }
+            ]
+          }
+        },
+        "reasoning": {
+          "whyChosen": "Second application server for high availability.",
+          "alternativesConsidered": [],
+          "tradeoffs": "Increases cost but ensures redundancy."
+        },
+        "dependencies": [
+          "nic-app-02"
+        ],
+        "references": []
+      },
+      {
+        "name": "sqlmi-db-prod-eastus",
+        "type": "Microsoft.Sql/managedInstances",
+        "subtype": "SQL Managed Instance",
+        "location": "eastus",
+        "sku": "GP_Gen5",
+        "properties": {
+          "subnetId": "snet-database-prod-eastus",
+          "administratorLogin": "sqladmin",
+          "publicDataEndpointEnabled": false,
+          "minimalTlsVersion": "1.2"
+        },
+        "reasoning": {
+          "whyChosen": "SQL Managed Instance provides a fully managed SQL Server experience with high compatibility.",
+          "alternativesConsidered": [
+            "Azure SQL Database"
+          ],
+          "tradeoffs": "Higher cost and deployment time compared to SQL Database, but better feature parity with on-prem SQL Server."
+        },
+        "dependencies": [
+          "snet-database-prod-eastus"
+        ],
+        "references": []
+      }
+    ],
+    "overallReasoning": {
+      "summary": "This plan establishes a 3-tier architecture with a VNet segmented into presentation, application, and database subnets. A VMSS handles the presentation layer with autoscaling. Two VMs serve as the application layer. SQL Managed Instance provides a secure, fully managed backend database. This design ensures separation of concerns, scalability, and security.",
+      "tradeoffs": "The use of SQL Managed Instance and multiple VMs increases the baseline cost compared to a fully PaaS solution (e.g., App Service + SQL Database). However, it offers greater control and compatibility."
+    },
+    "validation": "The plan follows Azure best practices for network segmentation and resource placement. Subnet delegation for SQL MI is included.",
+    "architecturePrinciples": [
+      "Network Segmentation",
+      "High Availability",
+      "Managed Services",
+      "Scalability"
+    ],
+    "references": []
+  }
+}

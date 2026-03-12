@@ -1,0 +1,27 @@
+{
+  "overallScore": 0.76,
+  "dimensions": {
+    "goalAlignment": 0.9,
+    "wafConformance": 0.72,
+    "dependencyCompleteness": 0.92,
+    "deploymentViability": 0.4
+  },
+  "risks": [
+    "HNS-enabled storage (ADLS Gen2) is set as the ML workspace default storage account, which is not supported by Azure Machine Learning",
+    "Standard_LRS on the storage account provides no geo-redundancy; a single datacenter failure could cause data loss for production ML training data",
+    "Public network access is enabled on the ML workspace, exposing training endpoints and data to the public internet",
+    "No managed identity configured for the ML workspace; best practices require managed identity for secure access to associated resources",
+    "No resource tags defined on any resource, reducing governance and cost-tracking visibility"
+  ],
+  "correctionsRecommended": [
+    "Create a separate non-HNS storage account for the ML workspace default datastore and keep the HNS-enabled storage as a linked data lake for training data",
+    "Upgrade the storage account SKU to Standard_GRS or Standard_ZRS for production-grade data resilience",
+    "Configure a system-assigned or user-assigned managed identity on the ML workspace for secure, keyless access to Key Vault, Storage, and Container Registry",
+    "Add private endpoints and disable public network access on the ML workspace for production security",
+    "Add consistent resource tags (e.g., environment, project, costCenter) to all resources"
+  ],
+  "hardDependencies": [
+    "ML workspace default storage account (stmltrainingprod001) has isHnsEnabled=true, which is incompatible with Microsoft.MachineLearningServices/workspaces — Azure ML does not support hierarchical namespace on the default storage account"
+  ],
+  "deployable": 0
+}

@@ -1,0 +1,366 @@
+{
+  "meta": {
+    "planId": "plan-iot-edge-anomaly-001",
+    "generatedAt": "2026-03-11T12:50:19.348Z",
+    "version": "0.1-draft",
+    "status": "draft"
+  },
+  "inputs": {
+    "userGoal": "Create an Azure IoT Hub edge deployment with AI module for anomaly detection, output events to Cosmos DB, and send SMS alerts via Logic Apps."
+  },
+  "plan": {
+    "architecturePrinciples": [
+      "Edge-first compute for low-latency anomaly detection",
+      "Serverless event processing to minimize operational overhead",
+      "Decoupled alerting via Logic Apps for flexible notification routing",
+      "Scalable NoSQL storage for high-throughput event ingestion"
+    ],
+    "resources": [
+      {
+        "name": "iot-hub-anomaly-prod-001",
+        "type": "Microsoft.Devices/IotHubs",
+        "location": "eastus",
+        "sku": "S1",
+        "properties": {
+          "skuCapacity": 1,
+          "features": "DeviceManagement",
+          "minTlsVersion": "1.2",
+          "publicNetworkAccess": "Enabled",
+          "routing": {
+            "routes": [
+              {
+                "name": "anomaly-events-route",
+                "source": "DeviceMessages",
+                "condition": "anomalyDetected = true",
+                "endpointNames": ["events"],
+                "isEnabled": true
+              }
+            ]
+          }
+        },
+        "reasoning": {
+          "whyChosen": "IoT Hub S1 tier supports IoT Edge module deployment, device management, and message routing required for edge AI scenarios. Standard tier (vs Free/Basic) is required for IoT Edge support and cloud-to-device messaging.",
+          "alternativesConsidered": [
+            "IoT Hub Basic tier — lacks IoT Edge support and cloud-to-device messaging",
+            "Azure Event Grid with MQTT broker — newer but less mature IoT Edge integration"
+          ],
+          "tradeoffs": "S1 at 1 unit supports 400K messages/day; scale units up if throughput exceeds this. IoT Edge modules run on-device so hub mainly handles management plane and filtered events."
+        },
+        "dependencies": [],
+        "dependencyReasoning": "No dependencies; root resource for the IoT architecture.",
+        "references": [
+          {
+            "title": "IoT Hub Bicep reference (2023-06-30)",
+            "url": "https://learn.microsoft.com/azure/templates/microsoft.devices/2023-06-30/iothubs"
+          },
+          {
+            "title": "What is Azure IoT Edge",
+            "url": "https://learn.microsoft.com/azure/iot-edge/about-iot-edge"
+          },
+          {
+            "title": "Deploy Anomaly Detector to IoT Edge",
+            "url": "https://learn.microsoft.com/azure/ai-services/anomaly-detector/how-to/deploy-anomaly-detection-on-iot-edge"
+          }
+        ]
+      },
+      {
+        "name": "cracranomaly001",
+        "type": "Microsoft.ContainerRegistry/registries",
+        "location": "eastus",
+        "sku": "Basic",
+        "properties": {
+          "adminUserEnabled": true,
+          "publicNetworkAccess": "Enabled"
+        },
+        "reasoning": {
+          "whyChosen": "Azure Container Registry stores custom AI anomaly detection module images that IoT Edge pulls to edge devices. Basic SKU is sufficient for development/small-scale; upgrade to Standard for geo-replication.",
+          "alternativesConsidered": [
+            "Docker Hub — public registry, less secure for proprietary AI models",
+            "GitHub Container Registry — viable but lacks native Azure IoT Edge integration"
+          ],
+          "tradeoffs": "Basic tier has 10 GiB storage. Upgrade to Standard if image count or size grows significantly."
+        },
+        "dependencies": [],
+        "dependencyReasoning": "No dependencies; IoT Hub references ACR credentials in edge deployment manifests.",
+        "references": [
+          {
+            "title": "Azure Container Registry overview",
+            "url": "https://learn.microsoft.com/azure/container-registry/container-registry-intro"
+          }
+        ]
+      },
+      {
+        "name": "stiotanomalyprod001",
+        "type": "Microsoft.Storage/storageAccounts",
+        "location": "eastus",
+        "sku": "Standard_LRS",
+        "properties": {
+          "kind": "StorageV2",
+          "accessTier": "Hot",
+          "supportsHttpsTrafficOnly": true,
+          "minimumTlsVersion": "TLS1_2",
+          "allowBlobPublicAccess": false
+        },
+        "reasoning": {
+          "whyChosen": "Required by Azure Functions for runtime state, triggers, and logging. StorageV2 kind is mandatory for Functions (supports Queue and Table). Also used for IoT Hub file upload if needed.",
+          "alternativesConsidered": [
+            "BlobStorage kind — not supported by Functions (missing Queue/Table)",
+            "Premium storage — unnecessary cost for function state storage"
+          ],
+          "tradeoffs": "LRS provides local redundancy only; upgrade to ZRS or GRS for higher durability requirements."
+        },
+        "dependencies": [],
+        "dependencyReasoning": "No dependencies; foundational storage for Functions.",
+        "references": [
+          {
+            "title": "Storage account overview",
+            "url": "https://learn.microsoft.com/azure/storage/common/storage-account-overview"
+          },
+          {
+            "title": "Bicep resource reference (2025-01-01)",
+            "url": "https://learn.microsoft.com/azure/templates/microsoft.storage/storageaccounts?pivots=deployment-language-bicep"
+          }
+        ]
+      },
+      {
+        "name": "cosmos-iot-anomaly-prod-001",
+        "type": "Microsoft.DocumentDB/databaseAccounts",
+        "location": "eastus",
+        "sku": "Standard",
+        "properties": {
+          "kind": "GlobalDocumentDB",
+          "databaseAccountOfferType": "Standard",
+          "consistencyPolicy": {
+            "defaultConsistencyLevel": "Session"
+          },
+          "capabilities": [
+            { "name": "EnableServerless" }
+          ],
+          "locations": [
+            {
+              "locationName": "eastus",
+              "failoverPriority": 0,
+              "isZoneRedundant": false
+            }
+          ],
+          "publicNetworkAccess": "Enabled"
+        },
+        "reasoning": {
+          "whyChosen": "Cosmos DB NoSQL API with Serverless capacity mode is ideal for variable IoT event ingestion — pay only for consumed RU/s. Session consistency balances latency and correctness for event queries. Change feed capability enables downstream Logic App triggering.",
+          "alternativesConsidered": [
+            "Azure SQL Database — rigid schema less suited for semi-structured IoT telemetry",
+            "Azure Table Storage — lower cost but lacks change feed, indexing, and query expressiveness",
+            "Cosmos DB provisioned throughput — higher baseline cost for unpredictable IoT workloads"
+          ],
+          "tradeoffs": "Serverless is single-region only and cannot use multi-region writes. Max 1 TB storage per container partition. Suitable for moderate-scale IoT; switch to provisioned throughput for high-volume scenarios."
+        },
+        "dependencies": [],
+        "dependencyReasoning": "No dependencies; the Function App writes to this account.",
+        "references": [
+          {
+            "title": "Cosmos DB overview",
+            "url": "https://learn.microsoft.com/azure/cosmos-db/introduction"
+          },
+          {
+            "title": "Bicep resource reference (2025-04-15)",
+            "url": "https://learn.microsoft.com/azure/templates/microsoft.documentdb/databaseaccounts?pivots=deployment-language-bicep"
+          },
+          {
+            "title": "Cosmos DB Serverless",
+            "url": "https://learn.microsoft.com/azure/cosmos-db/serverless"
+          }
+        ]
+      },
+      {
+        "name": "plan-iot-anomaly-prod-001",
+        "type": "Microsoft.Web/serverfarms",
+        "subtype": "Consumption",
+        "location": "eastus",
+        "sku": "Y1",
+        "properties": {
+          "reserved": false
+        },
+        "reasoning": {
+          "whyChosen": "Consumption plan for Azure Functions minimizes cost — pay per execution with automatic scaling. Ideal for event-driven IoT Hub message processing where load is variable.",
+          "alternativesConsidered": [
+            "Premium plan (EP1) — better cold-start performance but higher baseline cost",
+            "Dedicated App Service Plan — unnecessary for event-driven workloads"
+          ],
+          "tradeoffs": "Consumption plan has cold-start latency (~1-3s) and 5-minute execution timeout. Acceptable for IoT event processing and Cosmos DB writes."
+        },
+        "dependencies": [],
+        "dependencyReasoning": "No dependencies; hosts the Function App.",
+        "references": [
+          {
+            "title": "Azure Functions hosting options",
+            "url": "https://learn.microsoft.com/azure/azure-functions/functions-scale"
+          }
+        ]
+      },
+      {
+        "name": "func-iot-anomaly-prod-001",
+        "type": "Microsoft.Web/sites",
+        "subtype": "Azure Function",
+        "location": "eastus",
+        "sku": "Consumption",
+        "properties": {
+          "kind": "functionapp",
+          "serverFarmId": "plan-iot-anomaly-prod-001",
+          "siteConfig": {
+            "appSettings": [
+              {
+                "name": "FUNCTIONS_EXTENSION_VERSION",
+                "value": "~4"
+              },
+              {
+                "name": "FUNCTIONS_WORKER_RUNTIME",
+                "value": "dotnet-isolated"
+              }
+            ]
+          }
+        },
+        "reasoning": {
+          "whyChosen": "Azure Function with IoT Hub trigger (Event Hub-compatible endpoint) processes incoming anomaly events from edge devices, writes them to Cosmos DB output binding, and optionally triggers the Logic App via HTTP for SMS alerts. Serverless compute aligns with variable IoT event rates.",
+          "alternativesConsidered": [
+            "Azure Stream Analytics — powerful for time-window aggregation but higher cost for simple event routing",
+            "Azure Event Grid — good for event routing but requires additional Function for Cosmos DB writes anyway"
+          ],
+          "tradeoffs": "Functions Consumption plan has cold-start; for latency-sensitive alerting, consider Premium plan. The Function bridges IoT Hub → Cosmos DB since IoT Hub does not natively route to Cosmos DB."
+        },
+        "dependencies": [
+          "stiotanomalyprod001",
+          "plan-iot-anomaly-prod-001",
+          "iot-hub-anomaly-prod-001",
+          "cosmos-iot-anomaly-prod-001"
+        ],
+        "dependencyReasoning": "Requires storage account for function state, App Service Plan for hosting, IoT Hub as event source trigger, and Cosmos DB as output binding target.",
+        "references": [
+          {
+            "title": "Azure Functions IoT Hub trigger",
+            "url": "https://learn.microsoft.com/azure/azure-functions/functions-bindings-event-iot-trigger"
+          },
+          {
+            "title": "Azure Functions Cosmos DB output binding",
+            "url": "https://learn.microsoft.com/azure/azure-functions/functions-bindings-cosmosdb-v2-output"
+          }
+        ]
+      },
+      {
+        "name": "logic-sms-alert-prod-001",
+        "type": "Microsoft.Logic/workflows",
+        "location": "eastus",
+        "sku": "Consumption",
+        "properties": {
+          "state": "Enabled",
+          "definition": {
+            "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+            "contentVersion": "1.0.0.0",
+            "triggers": {
+              "manual": {
+                "type": "Request",
+                "kind": "Http",
+                "inputs": {
+                  "schema": {
+                    "type": "object",
+                    "properties": {
+                      "deviceId": { "type": "string" },
+                      "anomalyType": { "type": "string" },
+                      "severity": { "type": "string" },
+                      "timestamp": { "type": "string" }
+                    }
+                  }
+                }
+              }
+            },
+            "actions": {
+              "Send_SMS": {
+                "type": "ApiConnection",
+                "inputs": {
+                  "host": {
+                    "connection": {
+                      "name": "@parameters('$connections')['twilio']['connectionId']"
+                    }
+                  }
+                },
+                "runAfter": {}
+              }
+            }
+          }
+        },
+        "reasoning": {
+          "whyChosen": "Consumption Logic App provides a low-code workflow with HTTP trigger (called by Azure Function on anomaly detection) and built-in SMS connectors (Twilio, Office 365 SMS, or Azure Communication Services). Pay-per-execution model suits variable alert volumes.",
+          "alternativesConsidered": [
+            "Azure Communication Services direct SDK call from Function — tighter coupling, less visibility into workflow",
+            "Azure Notification Hubs — better for push notifications, not SMS",
+            "SendGrid/email — different channel, user specifically requested SMS"
+          ],
+          "tradeoffs": "Logic Apps Consumption has ~1-2s cold start. SMS connector requires a third-party account (Twilio) or Azure Communication Services resource. Workflow definition is a skeleton; finalize trigger schema and SMS action after deployment."
+        },
+        "dependencies": [],
+        "dependencyReasoning": "No infrastructure dependencies; the Azure Function calls this Logic App's HTTP trigger endpoint at runtime.",
+        "references": [
+          {
+            "title": "Logic Apps overview",
+            "url": "https://learn.microsoft.com/azure/logic-apps/logic-apps-overview"
+          },
+          {
+            "title": "Logic Apps Bicep quickstart",
+            "url": "https://learn.microsoft.com/azure/logic-apps/quickstart-create-deploy-bicep"
+          },
+          {
+            "title": "Alert to text message with Logic App",
+            "url": "https://learn.microsoft.com/azure/templates/microsoft.logic/2019-05-01/workflows"
+          }
+        ]
+      },
+      {
+        "name": "law-iot-anomaly-prod-001",
+        "type": "Microsoft.OperationalInsights/workspaces",
+        "location": "eastus",
+        "sku": "PerGB2018",
+        "properties": {
+          "retentionInDays": 30
+        },
+        "reasoning": {
+          "whyChosen": "Log Analytics Workspace provides centralized monitoring for IoT Hub diagnostics, Function App logs, and Logic App run history. Essential for operational visibility in IoT solutions.",
+          "alternativesConsidered": [
+            "Application Insights standalone — less suited for IoT Hub diagnostics",
+            "Third-party monitoring (Datadog, Splunk) — additional cost and setup"
+          ],
+          "tradeoffs": "PerGB2018 pricing with 30-day retention balances cost and observability. Increase retention for compliance needs."
+        },
+        "dependencies": [],
+        "dependencyReasoning": "No dependencies; other resources send diagnostics to this workspace.",
+        "references": [
+          {
+            "title": "Log Analytics workspace overview",
+            "url": "https://learn.microsoft.com/azure/azure-monitor/logs/log-analytics-workspace-overview"
+          }
+        ]
+      }
+    ],
+    "overallReasoning": {
+      "summary": "This architecture deploys an IoT Edge solution where anomaly detection AI runs at the edge for low-latency inference. Edge devices send filtered anomaly events to IoT Hub, which triggers an Azure Function. The Function writes events to Cosmos DB (serverless) for storage/analysis and calls a Logic App HTTP endpoint to send SMS alerts. Container Registry stores the custom AI module images pulled by IoT Edge devices. Log Analytics provides end-to-end observability.",
+      "tradeoffs": "Serverless-first approach (Consumption Functions + Serverless Cosmos DB + Consumption Logic Apps) minimizes cost for variable workloads but introduces cold-start latency. IoT Hub S1 has a 400K messages/day limit per unit. The Anomaly Detector container for IoT Edge is being retired Oct 2026 — consider building a custom ML model using Azure ML or ONNX Runtime for long-term edge inference. SMS delivery requires a Twilio or Azure Communication Services account configured as a Logic App connector."
+    },
+    "validation": "All resources deploy to eastus region. Storage Account uses StorageV2 kind compatible with Functions. Cosmos DB Serverless is single-region (eastus) with no multi-region write conflicts. IoT Hub S1 supports IoT Edge and message routing. Function App connects to IoT Hub Event Hub-compatible endpoint, writes to Cosmos DB via output binding, and calls Logic App via HTTP. No subnet/network conflicts as all resources use public endpoints.",
+    "references": [
+      {
+        "title": "IoT Edge architecture overview",
+        "url": "https://learn.microsoft.com/azure/iot-edge/about-iot-edge"
+      },
+      {
+        "title": "IoT Hub message routing to endpoints",
+        "url": "https://learn.microsoft.com/azure/iot-hub/iot-hub-devguide-messages-d2c"
+      },
+      {
+        "title": "Azure Functions IoT Hub bindings",
+        "url": "https://learn.microsoft.com/azure/azure-functions/functions-bindings-event-iot"
+      },
+      {
+        "title": "Cosmos DB change feed",
+        "url": "https://learn.microsoft.com/azure/cosmos-db/change-feed"
+      }
+    ]
+  }
+}

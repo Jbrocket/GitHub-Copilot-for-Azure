@@ -1,0 +1,27 @@
+{
+  "overallScore": 0.86,
+  "dimensions": {
+    "goalAlignment": 0.88,
+    "wafConformance": 0.72,
+    "dependencyCompleteness": 0.92,
+    "deploymentViability": 0.92
+  },
+  "risks": [
+    "No Azure Communication Services resource included — Logic App references ACS SMS connector but the ACS resource is not provisioned in the plan",
+    "No monitoring or observability resources (Application Insights, Log Analytics) — limits operational visibility into the streaming pipeline",
+    "Single-region deployment (eastus) with no failover or geo-redundancy strategy — Cosmos DB serverless is single-region only and Storage uses Standard_LRS",
+    "No managed identity configuration for service-to-service authentication — relies on default key-based access between IoT Hub, Stream Analytics, Cosmos DB, and Service Bus",
+    "Public network access enabled on Cosmos DB and Container Registry — no private endpoint or VNet integration configured",
+    "Standard_LRS storage provides only local redundancy — IoT Hub file uploads and Stream Analytics checkpoint data have no zone or geo protection"
+  ],
+  "correctionsRecommended": [
+    "Add an Azure Communication Services (Microsoft.Communication/communicationServices) resource to enable the Logic App SMS connector",
+    "Add Application Insights and a Log Analytics workspace for end-to-end monitoring of IoT Hub, Stream Analytics, and Logic App workflows",
+    "Configure managed identities on Stream Analytics, Logic App, and IoT Hub for secure, keyless access to Cosmos DB, Service Bus, and Storage",
+    "Consider private endpoints or VNet service endpoints for Cosmos DB and Container Registry to reduce attack surface",
+    "Add resource tags (environment, project, cost-center) across all resources for governance and cost tracking",
+    "Consider upgrading Storage to Standard_ZRS for zone-level redundancy on checkpoint and staging data"
+  ],
+  "hardDependencies": [],
+  "deployable": 1
+}

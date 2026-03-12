@@ -1,0 +1,331 @@
+{
+  "meta": {
+    "planId": "plan-ml-training-pipeline",
+    "generatedAt": "2026-03-11T12:50:19.350Z",
+    "version": "0.1-draft",
+    "status": "draft"
+  },
+  "inputs": {
+    "userGoal": "Build a secure ML training pipeline with data stored in Azure Data Lake, enable audit logging for all training jobs, and encrypt all outputs."
+  },
+  "plan": {
+    "architecturePrinciples": [
+      "Secure by default — encryption at rest, Key Vault for secrets, RBAC authorization",
+      "Full audit trail — Log Analytics captures all training job telemetry and diagnostics",
+      "Data Lake separation — training data in ADLS Gen2, ML artifacts in dedicated storage",
+      "Managed identity — passwordless access between services"
+    ],
+    "resources": [
+      {
+        "name": "id-mltraining-prod-001",
+        "type": "Microsoft.ManagedIdentity/userAssignedIdentities",
+        "location": "eastus",
+        "sku": "N/A",
+        "properties": {},
+        "reasoning": {
+          "whyChosen": "User-assigned managed identity provides passwordless, auditable access between the ML workspace, Key Vault, and storage accounts. Required for CMK encryption at creation and aligns with the Security pillar of the Well-Architected Framework.",
+          "alternativesConsidered": [
+            "System-assigned managed identity — cannot be pre-configured before resource creation; does not support CMK at creation"
+          ],
+          "tradeoffs": "Requires explicit role assignments but provides better lifecycle control than system-assigned identities."
+        },
+        "dependencies": [],
+        "dependencyReasoning": "No dependencies — identity must be created first so other resources can reference it.",
+        "references": [
+          {
+            "title": "Managed identities overview",
+            "url": "https://learn.microsoft.com/entra/identity/managed-identities-azure-resources/overview"
+          }
+        ]
+      },
+      {
+        "name": "log-mltraining-prod-001",
+        "type": "Microsoft.OperationalInsights/workspaces",
+        "location": "eastus",
+        "sku": "PerGB2018",
+        "properties": {
+          "retentionInDays": 90,
+          "publicNetworkAccessForIngestion": "Enabled",
+          "publicNetworkAccessForQuery": "Enabled"
+        },
+        "reasoning": {
+          "whyChosen": "Log Analytics workspace provides centralized audit logging for all ML training jobs, compute events, and diagnostic data. The PerGB2018 SKU is the recommended pay-as-you-go tier. 90-day retention ensures audit compliance while controlling costs.",
+          "alternativesConsidered": [
+            "CapacityReservation SKU — overkill for initial workloads under 100 GB/day",
+            "Azure Monitor Logs with shorter retention — insufficient for audit trail requirements"
+          ],
+          "tradeoffs": "Pay-per-GB can become expensive at high volume; upgrade to CapacityReservation if ingestion exceeds 100 GB/day."
+        },
+        "dependencies": [],
+        "dependencyReasoning": "No dependencies — Log Analytics must exist before Application Insights can link to it.",
+        "references": [
+          {
+            "title": "Log Analytics overview",
+            "url": "https://learn.microsoft.com/azure/azure-monitor/logs/log-analytics-overview"
+          },
+          {
+            "title": "Log Analytics pricing",
+            "url": "https://learn.microsoft.com/azure/azure-monitor/logs/cost-logs"
+          }
+        ]
+      },
+      {
+        "name": "appi-mltraining-prod-001",
+        "type": "Microsoft.Insights/components",
+        "location": "eastus",
+        "sku": "N/A",
+        "properties": {
+          "kind": "web",
+          "Application_Type": "web",
+          "IngestionMode": "LogAnalytics",
+          "RetentionInDays": 90,
+          "WorkspaceResourceId": "[resourceId('Microsoft.OperationalInsights/workspaces', 'log-mltraining-prod-001')]"
+        },
+        "reasoning": {
+          "whyChosen": "Workspace-based Application Insights provides ML workspace telemetry, training job monitoring, and performance diagnostics. Data flows into Log Analytics for unified audit querying. Classic App Insights is being deprecated.",
+          "alternativesConsidered": [
+            "Classic Application Insights — being phased out, does not support unified Log Analytics queries"
+          ],
+          "tradeoffs": "Pricing is governed by the Log Analytics workspace; no separate App Insights billing."
+        },
+        "dependencies": [
+          "log-mltraining-prod-001"
+        ],
+        "dependencyReasoning": "Requires the Log Analytics workspace to exist for workspace-based ingestion.",
+        "references": [
+          {
+            "title": "Application Insights overview",
+            "url": "https://learn.microsoft.com/azure/azure-monitor/app/app-insights-overview"
+          },
+          {
+            "title": "Workspace-based App Insights",
+            "url": "https://learn.microsoft.com/azure/azure-monitor/app/convert-classic-resource"
+          }
+        ]
+      },
+      {
+        "name": "kv-mltraining-prod-001",
+        "type": "Microsoft.KeyVault/vaults",
+        "location": "eastus",
+        "sku": "standard",
+        "properties": {
+          "sku": {
+            "name": "standard",
+            "family": "A"
+          },
+          "enableSoftDelete": true,
+          "softDeleteRetentionInDays": 90,
+          "enablePurgeProtection": true,
+          "enableRbacAuthorization": true,
+          "enabledForDiskEncryption": false,
+          "enabledForDeployment": false,
+          "enabledForTemplateDeployment": true
+        },
+        "reasoning": {
+          "whyChosen": "Key Vault stores encryption keys and secrets for the ML pipeline. Soft delete and purge protection are enabled to meet encryption requirements (mandatory for CMK pairing). RBAC authorization is preferred over access policies for fine-grained, auditable control aligned with the Security pillar.",
+          "alternativesConsidered": [
+            "Premium SKU with HSM-backed keys — unnecessary unless regulatory compliance mandates hardware key protection",
+            "Azure Managed HSM — excessive for this workload"
+          ],
+          "tradeoffs": "Standard SKU uses software-protected keys; upgrade to Premium if HSM-backed keys are needed for compliance."
+        },
+        "dependencies": [
+          "id-mltraining-prod-001"
+        ],
+        "dependencyReasoning": "The managed identity needs RBAC role assignments on Key Vault for ML workspace access.",
+        "references": [
+          {
+            "title": "Key Vault overview",
+            "url": "https://learn.microsoft.com/azure/key-vault/general/overview"
+          },
+          {
+            "title": "Key Vault soft-delete",
+            "url": "https://learn.microsoft.com/azure/key-vault/general/soft-delete-overview"
+          }
+        ]
+      },
+      {
+        "name": "stmltrainingprod001",
+        "type": "Microsoft.Storage/storageAccounts",
+        "subtype": "General-purpose v2",
+        "location": "eastus",
+        "sku": "Standard_LRS",
+        "properties": {
+          "kind": "StorageV2",
+          "accessTier": "Hot",
+          "supportsHttpsTrafficOnly": true,
+          "minimumTlsVersion": "TLS1_2",
+          "allowBlobPublicAccess": false,
+          "encryption": {
+            "keySource": "Microsoft.Storage",
+            "services": {
+              "blob": { "enabled": true },
+              "file": { "enabled": true },
+              "table": { "enabled": true },
+              "queue": { "enabled": true }
+            }
+          }
+        },
+        "reasoning": {
+          "whyChosen": "Dedicated storage account for the ML workspace to store experiments, models, snapshots, and pipeline artifacts. StorageV2 is required by ML workspace constraints. Microsoft-managed encryption is enabled by default on all services. HTTPS-only and TLS 1.2 enforce transport security.",
+          "alternativesConsidered": [
+            "Standard_ZRS — provides zone redundancy but higher cost; not required for initial deployment",
+            "Customer-managed keys (CMK) — can be added later by updating encryption.keySource to Microsoft.Keyvault"
+          ],
+          "tradeoffs": "LRS provides local redundancy only; upgrade to ZRS or GRS for production workloads with higher availability requirements."
+        },
+        "dependencies": [],
+        "dependencyReasoning": "No dependencies — created before the ML workspace that references it.",
+        "references": [
+          {
+            "title": "Storage account overview",
+            "url": "https://learn.microsoft.com/azure/storage/common/storage-account-overview"
+          },
+          {
+            "title": "Storage redundancy",
+            "url": "https://learn.microsoft.com/azure/storage/common/storage-redundancy"
+          }
+        ]
+      },
+      {
+        "name": "stdatalakeprod001",
+        "type": "Microsoft.Storage/storageAccounts",
+        "subtype": "Data Lake Gen2",
+        "location": "eastus",
+        "sku": "Standard_LRS",
+        "properties": {
+          "kind": "StorageV2",
+          "isHnsEnabled": true,
+          "accessTier": "Hot",
+          "supportsHttpsTrafficOnly": true,
+          "minimumTlsVersion": "TLS1_2",
+          "allowBlobPublicAccess": false,
+          "encryption": {
+            "keySource": "Microsoft.Storage",
+            "services": {
+              "blob": { "enabled": true },
+              "file": { "enabled": true }
+            }
+          }
+        },
+        "reasoning": {
+          "whyChosen": "Azure Data Lake Storage Gen2 (StorageV2 with hierarchical namespace) provides optimized storage for ML training datasets with directory-level access control (ACLs) and high-throughput analytics. The user explicitly requires Data Lake for training data. Encryption at rest is enabled by default.",
+          "alternativesConsidered": [
+            "Azure Blob Storage without HNS — lacks directory semantics and fine-grained ACLs needed for large-scale ML data management",
+            "Azure Data Lake Storage Gen1 — deprecated, do not use"
+          ],
+          "tradeoffs": "HNS cannot be disabled after creation. Slightly higher per-transaction costs compared to flat blob storage, but directory operations (rename, delete) are atomic and O(1)."
+        },
+        "dependencies": [],
+        "dependencyReasoning": "No dependencies — independent data store for training datasets.",
+        "references": [
+          {
+            "title": "Azure Data Lake Storage Gen2 introduction",
+            "url": "https://learn.microsoft.com/azure/storage/blobs/data-lake-storage-introduction"
+          },
+          {
+            "title": "Storage account overview",
+            "url": "https://learn.microsoft.com/azure/storage/common/storage-account-overview"
+          }
+        ]
+      },
+      {
+        "name": "crmltrainingprod001",
+        "type": "Microsoft.ContainerRegistry/registries",
+        "location": "eastus",
+        "sku": "Basic",
+        "properties": {
+          "adminUserEnabled": false
+        },
+        "reasoning": {
+          "whyChosen": "Container Registry stores custom Docker images for ML training environments and inference. Required by the ML workspace for reproducible experiments. Basic SKU is sufficient for initial workloads. Admin user disabled in favor of managed identity access.",
+          "alternativesConsidered": [
+            "Premium SKU — adds private link, CMK, and geo-replication but is excessive for initial deployment",
+            "No container registry — limits workspace to pre-built environments only"
+          ],
+          "tradeoffs": "Basic SKU has 10 GiB storage and no private link support; upgrade to Premium for production workloads requiring network isolation."
+        },
+        "dependencies": [],
+        "dependencyReasoning": "No dependencies — created before the ML workspace that references it.",
+        "references": [
+          {
+            "title": "Container Registry overview",
+            "url": "https://learn.microsoft.com/azure/container-registry/container-registry-intro"
+          },
+          {
+            "title": "ACR SKU tiers",
+            "url": "https://learn.microsoft.com/azure/container-registry/container-registry-skus"
+          }
+        ]
+      },
+      {
+        "name": "mlw-mltraining-prod-001",
+        "type": "Microsoft.MachineLearningServices/workspaces",
+        "location": "eastus",
+        "sku": "Basic",
+        "properties": {
+          "identity": {
+            "type": "SystemAssigned,UserAssigned",
+            "userAssignedIdentities": {
+              "[resourceId('Microsoft.ManagedIdentity/userAssignedIdentities', 'id-mltraining-prod-001')]": {}
+            }
+          },
+          "storageAccount": "[resourceId('Microsoft.Storage/storageAccounts', 'stmltrainingprod001')]",
+          "keyVault": "[resourceId('Microsoft.KeyVault/vaults', 'kv-mltraining-prod-001')]",
+          "applicationInsights": "[resourceId('Microsoft.Insights/components', 'appi-mltraining-prod-001')]",
+          "containerRegistry": "[resourceId('Microsoft.ContainerRegistry/registries', 'crmltrainingprod001')]",
+          "hbiWorkspace": false,
+          "publicNetworkAccess": "Enabled",
+          "managedNetwork": {
+            "isolationMode": "AllowInternetOutbound"
+          }
+        },
+        "reasoning": {
+          "whyChosen": "Azure Machine Learning workspace is the central hub for ML training pipelines, experiment tracking, model registry, and compute management. It links to all supporting resources (storage, Key Vault, App Insights, ACR). SystemAssigned+UserAssigned identity enables both automatic RBAC and pre-provisioned CMK access. AllowInternetOutbound isolation allows pulling packages while managing outbound rules.",
+          "alternativesConsidered": [
+            "Azure Databricks — alternative ML platform but more complex; better suited for Spark-based workloads",
+            "Azure AI Foundry Hub+Project — appropriate for GenAI/LLM workloads but overhead for traditional ML training"
+          ],
+          "tradeoffs": "Basic SKU is suitable for most ML workloads. Public network access is enabled for ease of setup; restrict to AllowOnlyApprovedOutbound for production hardening."
+        },
+        "dependencies": [
+          "id-mltraining-prod-001",
+          "stmltrainingprod001",
+          "kv-mltraining-prod-001",
+          "appi-mltraining-prod-001",
+          "crmltrainingprod001"
+        ],
+        "dependencyReasoning": "ML workspace must be created after all its linked resources (storage, Key Vault, App Insights, ACR, identity) exist.",
+        "references": [
+          {
+            "title": "Azure Machine Learning workspace",
+            "url": "https://learn.microsoft.com/azure/templates/microsoft.machinelearningservices/workspaces?pivots=deployment-language-bicep"
+          },
+          {
+            "title": "ML workspace overview",
+            "url": "https://learn.microsoft.com/azure/machine-learning/concept-workspace"
+          }
+        ]
+      }
+    ],
+    "overallReasoning": {
+      "summary": "This architecture provisions a secure Azure Machine Learning training pipeline with 8 resources. Training data resides in Azure Data Lake Storage Gen2 (hierarchical namespace enabled) for optimized dataset management. A separate storage account serves as the ML workspace's default artifact store. Key Vault provides centralized secrets and encryption key management with soft delete and purge protection. Log Analytics Workspace and Application Insights deliver full audit logging and training job telemetry. Container Registry enables reproducible custom training environments. All storage is encrypted at rest by default (Microsoft-managed keys), with a clear upgrade path to customer-managed keys via Key Vault.",
+      "tradeoffs": "This plan uses Standard/Basic SKUs and LRS redundancy to minimize cost for initial deployment. For production hardening, consider: (1) upgrading storage to ZRS/GRS for resilience, (2) enabling CMK encryption via Key Vault for regulatory compliance, (3) restricting network access with private endpoints and AllowOnlyApprovedOutbound isolation, (4) upgrading ACR to Premium for private link support."
+    },
+    "validation": "All resources are deployed to eastus. ML workspace correctly links to its required dependencies: StorageV2 storage (no HNS), Key Vault with soft-delete and purge protection, workspace-based Application Insights backed by Log Analytics, and Container Registry. Data Lake storage is separate with HNS enabled. Managed identity is created first for RBAC assignments. No subnet conflicts — no VNet resources in this plan. Storage pairing checks pass: ML workspace storage uses StorageV2 kind.",
+    "references": [
+      {
+        "title": "Azure Machine Learning architecture",
+        "url": "https://learn.microsoft.com/azure/machine-learning/concept-workspace"
+      },
+      {
+        "title": "Azure Data Lake Storage Gen2",
+        "url": "https://learn.microsoft.com/azure/storage/blobs/data-lake-storage-introduction"
+      },
+      {
+        "title": "Azure Well-Architected Framework — Security",
+        "url": "https://learn.microsoft.com/azure/well-architected/security/"
+      }
+    ]
+  }
+}

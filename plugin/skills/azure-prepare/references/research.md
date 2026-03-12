@@ -9,9 +9,10 @@ After architecture planning, research each selected component to gather best pra
 3. **Check Resource Naming Rules** — For each resource type, check [resource naming rules](https://learn.microsoft.com/azure/azure-resource-manager/management/resource-name-rules) for valid characters, length limits, and uniqueness scopes
 4. **Load Recipe References** — Load the selected recipe's guide (e.g., [AZD](recipes/azd/README.md)) and its IAC rules, MCP best practices, and schema tools listed in its "Before Generation" table
 5. **Check Region Availability** — Verify all selected services are available in the target region per [region-availability.md](region-availability.md)
-6. **Load Runtime References** — For containerized apps, load language-specific production settings (e.g., [Node.js](runtimes/nodejs.md))
-7. **Invoke Related Skills** — For deeper guidance, invoke mapped skills from the table below
-8. **Document Findings** — Record key insights in `.azure/plan.md`
+6. **Check Provisioning Limits** — Invoke **azure-quotas** skill to validate that the selected subscription and region have sufficient quota/capacity for all planned resources. Complete [Step 6 of the plan template](plan-template.md#6-provisioning-limit-checklist) in two phases: (1) prepare resource inventory with deployment quantities, (2) fetch quotas and validate capacity using azure-quotas skill
+7. **Load Runtime References** — For containerized apps, load language-specific production settings (e.g., [Node.js](runtimes/nodejs.md))
+8. **Invoke Related Skills** — For deeper guidance, invoke mapped skills from the table below
+9. **Document Findings** — Record key insights in `.azure/plan.md`
 
 ## Service-to-Reference Mapping
 
@@ -26,14 +27,18 @@ After architecture planning, research each selected component to gather best pra
 | **Data** | | |
 | Azure SQL | [SQL Database](services/sql-database/README.md) | `azure-security` |
 | Cosmos DB | [Cosmos DB](services/cosmos-db/README.md) | `azure-security` |
-| PostgreSQL | — | `azure-postgres` (invoke for passwordless auth) |
+| PostgreSQL | — | — |
 | Storage (Blob/Files) | [Storage](services/storage/README.md) | `azure-storage`, `azure-security-hardening` |
 | **Messaging** | | |
 | Service Bus | [Service Bus](services/service-bus/README.md) | — |
 | Event Grid | [Event Grid](services/event-grid/README.md) | — |
 | Event Hubs | — | — |
 | **Integration** | | |
+| API Management | [APIM](apim.md) | `azure-aigateway` (invoke for AI Gateway policies) |
 | Logic Apps | [Logic Apps](services/logic-apps/README.md) | — |
+| **Workflow & Orchestration** | | |
+| Durable Functions | [Durable Functions](services/functions/durable.md), [Durable Task Scheduler](services/durable-task-scheduler/README.md) | — |
+| Durable Task Scheduler | [Durable Task Scheduler](services/durable-task-scheduler/README.md) | — |
 | **Security & Identity** | | |
 | Key Vault | [Key Vault](services/key-vault/README.md) | `azure-security`, `azure-keyvault-expiration-audit` |
 | Managed Identity | — | `azure-security`, `entra-app-registration` |
@@ -74,7 +79,7 @@ Invoke related skills for specialized scenarios:
 |----------|--------|
 | **Using GitHub Copilot SDK** | **Invoke `azure-hosted-copilot-sdk`** (scaffold + config, then resume azure-prepare) |
 | Using Azure Functions | Stay in **azure-prepare** — load [selection.md](services/functions/templates/selection.md) → Follow [composition.md](services/functions/templates/recipes/composition.md) algorithm |
-| PostgreSQL with passwordless auth | Invoke `azure-postgres` skill |
+| PostgreSQL with passwordless auth | Handle directly without a separate skill |
 | Need detailed security hardening | `azure-security-hardening` |
 | Setting up App Insights instrumentation | `appinsights-instrumentation` |
 | Building AI applications | `microsoft-foundry` |
@@ -88,9 +93,7 @@ For **Azure Functions**:
 3. Result: Base template + recipe composition (never synthesize IaC)
 
 For **PostgreSQL**:
-1. Invoke: `azure-postgres` skill
-2. Extract: passwordless auth patterns
-3. Apply: to artifact generation
+1. Handle passwordless auth patterns directly without a separate skill
 
 ### Step 3: Document in Plan
 

@@ -1,0 +1,29 @@
+{
+  "overallScore": 0.85,
+  "dimensions": {
+    "goalAlignment": 0.88,
+    "wafConformance": 0.72,
+    "dependencyCompleteness": 0.92,
+    "deploymentViability": 0.9
+  },
+  "risks": [
+    "Cache storage account uses Standard_LRS — Microsoft recommends ZRS for zone-resilient ASR replication to avoid data loss during availability zone failures",
+    "No monitoring or diagnostics resources (Log Analytics workspace, diagnostic settings, alerts) for operational visibility into VMs, ASR replication health, or Automation runbook execution",
+    "Automation runbook DNS failover is trigger-dependent; a runbook execution failure could leave DNS records pointing to an unavailable region",
+    "No RBAC role assignments defined for the Automation Account system-assigned managed identity to operate on the DNS zone or Recovery Services vault",
+    "Missing ASR recovery plan resource (Microsoft.RecoveryServices/vaults/replicationRecoveryPlans) to orchestrate multi-VM failover with runbook pre/post actions",
+    "No replicationProtectedItems resources to actually enable VM replication within the ASR fabric",
+    "Automation Account has publicNetworkAccess enabled and disableLocalAuth set to false, reducing security posture"
+  ],
+  "correctionsRecommended": [
+    "Upgrade cache storage account SKU from Standard_LRS to Standard_ZRS for availability zone resilience as recommended by Microsoft for ASR cache storage",
+    "Add a Log Analytics workspace and configure diagnostic settings on VMs, Recovery Services vault, and Automation Account for centralized monitoring",
+    "Add explicit RBAC role assignments (DNS Zone Contributor on the DNS zone, Site Recovery Contributor on the RSV) for the Automation Account system-assigned managed identity",
+    "Add an ASR recovery plan resource (Microsoft.RecoveryServices/vaults/replicationRecoveryPlans) to orchestrate failover sequence with the DNS runbook as a pre/post action",
+    "Consider replacing the DNS zone + Automation runbook pattern with Azure Traffic Manager or Azure Front Door for automatic health-probe-based DNS failover",
+    "Set disableLocalAuth to true and publicNetworkAccess to false on the Automation Account for security hardening",
+    "Add resource tags across all resources for cost tracking, environment identification, and operational management"
+  ],
+  "hardDependencies": [],
+  "deployable": 1
+}

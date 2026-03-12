@@ -12,6 +12,13 @@ permissions:
 on:
   workflow_dispatch:
     inputs:
+      model-override:
+        description: 'Model to use for testing'
+        required: false
+        type: choice
+        options:
+          - claude-sonnet-4.5
+          - claude-opus-4.5
       test-pattern:
         description: 'Optional: Comma separated patterns by name or describe block (e.g. "creates todo list", "static-web-apps-deploy", "Terraform"). If empty, all tests will be run.'
         required: false
@@ -24,6 +31,10 @@ on:
         default: false
   workflow_call:
     inputs:
+      model-override:
+        description: 'Model to use for testing'
+        required: false
+        type: string
       test-pattern:
         description: 'Optional: Comma delimited tests by name or describe block'
         required: false
@@ -47,8 +58,9 @@ jobs:
     steps:
       - name: Parse test-pattern input into matrix
         id: set-matrix
+        env:
+          INPUT: ${{ inputs.test-pattern }}
         run: |
-          INPUT="${{ inputs.test-pattern }}"
           # Default test groups if input is empty
           DEFAULT='["skill-invocation","static-web-apps-deploy","app-service-deploy","azure-functions-deploy","azure-container-apps-deploy","terraform-static-web-apps-deploy","terraform-app-service-deploy","terraform-azure-functions-deploy","terraform-azure-container-apps-deploy","brownfield-dotnet","brownfield-javascript","brownfield-python"]'
           
@@ -80,7 +92,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Install azd
         uses: Azure/setup-azd@v2
@@ -152,8 +164,11 @@ jobs:
         env:
           GH_HEAD_SHA: ${{ github.sha }}
           DEBUG: ${{ inputs.debug && '1' || '' }}
+          MODEL_OVERRIDE: ${{ inputs.model-override }}
+          TEST_GROUP: ${{ matrix.test-group }}
         run: |
-          npm run test:integration -- azure-deploy "${{ matrix.test-group }}"
+          echo test with $MODEL_OVERRIDE
+          npm run test:integration -- azure-deploy "$TEST_GROUP"
         continue-on-error: true
 
       - name: Generate report

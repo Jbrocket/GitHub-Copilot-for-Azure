@@ -1,0 +1,202 @@
+{
+  "meta": {
+    "planId": "plan-ml-training-001",
+    "generatedAt": "2026-03-11T13:20:00Z",
+    "version": "1.0",
+    "status": "draft"
+  },
+  "inputs": {
+    "userGoal": "Build a secure ML training pipeline with data stored in Azure Data Lake, enable audit logging for all training jobs, and encrypt all outputs."
+  },
+  "plan": {
+    "overallReasoning": {
+      "summary": "This plan establishes a secure Azure Machine Learning environment. It includes a Storage Account with Hierarchical Namespace (ADLS Gen2) for data, a Key Vault for secrets, and a Container Registry for environments. Monitoring and audit logging are secured via Application Insights and a Log Analytics Workspace, with Diagnostic Settings enabled on the ML Workspace to capture audit logs. All data at rest is encrypted using platform-managed keys by default.",
+      "tradeoffs": "Using platform-managed keys simplifies management but offers less control than Customer-Managed Keys (CMK). Public network access is enabled by default for simplicity; a truly isolated secure environment would require Private Endpoints and VNET integration (omitted here per 'assume all defaults' instruction)."
+    },
+    "architecturePrinciples": [
+      "Secure by default (Encryption at rest)",
+      "Auditability (Centralized logging)",
+      "Scalability (Auto-scaling compute clusters)"
+    ],
+    "resources": [
+      {
+        "name": "rg-ml-training-prod-001",
+        "type": "Microsoft.Resources/resourceGroups",
+        "location": "eastus",
+        "sku": "N/A",
+        "reasoning": {
+          "whyChosen": "Logical container for all related resources.",
+          "alternativesConsidered": ["Use existing"],
+          "tradeoffs": "None"
+        },
+        "dependencies": [],
+        "references": []
+      },
+      {
+        "name": "stmltrainingprod001",
+        "type": "Microsoft.Storage/storageAccounts",
+        "location": "eastus",
+        "sku": "Standard_LRS",
+        "properties": {
+          "kind": "StorageV2",
+          "isHnsEnabled": true,
+          "supportsHttpsTrafficOnly": true,
+          "minimumTlsVersion": "TLS1_2",
+          "allowBlobPublicAccess": false
+        },
+        "reasoning": {
+          "whyChosen": "Required for AML default datastore. Enabled Hierarchical Namespace (HNS) to serve as Azure Data Lake Storage Gen2 as requested.",
+          "alternativesConsidered": ["BlobStorage", "Premium_LRS"],
+          "tradeoffs": "Standard_LRS offers cost efficiency but lower IOPS than Premium."
+        },
+        "dependencies": ["rg-ml-training-prod-001"],
+        "references": [
+          {
+            "title": "Azure Data Lake Storage Gen2 Introduction",
+            "url": "https://learn.microsoft.com/azure/storage/blobs/data-lake-storage-introduction"
+          }
+        ]
+      },
+      {
+        "name": "kv-ml-training-prod-001",
+        "type": "Microsoft.KeyVault/vaults",
+        "location": "eastus",
+        "sku": "Standard",
+        "properties": {
+          "enabledForTemplateDeployment": true,
+          "enableRbacAuthorization": true,
+          "tenantId": "${subscription().tenantId}"
+        },
+        "reasoning": {
+          "whyChosen": "Required by AML to store secrets, credentials, and connection strings securely.",
+          "alternativesConsidered": ["Premium (HSM-backed)"],
+          "tradeoffs": "Standard is sufficient for most software-key scenarios."
+        },
+        "dependencies": ["rg-ml-training-prod-001"],
+        "references": []
+      },
+      {
+        "name": "crmltrainingprod001",
+        "type": "Microsoft.ContainerRegistry/registries",
+        "location": "eastus",
+        "sku": "Standard",
+        "properties": {
+          "adminUserEnabled": false
+        },
+        "reasoning": {
+          "whyChosen": "Required by AML to store Docker images for training environments and models.",
+          "alternativesConsidered": ["Basic", "Premium"],
+          "tradeoffs": "Standard allows more storage and throughput than Basic."
+        },
+        "dependencies": ["rg-ml-training-prod-001"],
+        "references": []
+      },
+      {
+        "name": "log-ml-training-prod-001",
+        "type": "Microsoft.OperationalInsights/workspaces",
+        "location": "eastus",
+        "sku": "PerGB2018",
+        "properties": {
+          "retentionInDays": 30
+        },
+        "reasoning": {
+          "whyChosen": "Central repository for logs and metrics. Required to back Application Insights and store Audit logs.",
+          "alternativesConsidered": [],
+          "tradeoffs": "None"
+        },
+        "dependencies": ["rg-ml-training-prod-001"],
+        "references": []
+      },
+      {
+        "name": "appi-ml-training-prod-001",
+        "type": "Microsoft.Insights/components",
+        "location": "eastus",
+        "sku": "web",
+        "properties": {
+          "Application_Type": "web",
+          "WorkspaceResourceId": "${log-ml-training-prod-001.id}"
+        },
+        "reasoning": {
+          "whyChosen": "Required by AML for monitoring and logging metrics from training jobs and endpoints.",
+          "alternativesConsidered": ["Classic App Insights (Deprecated)"],
+          "tradeoffs": "None"
+        },
+        "dependencies": ["log-ml-training-prod-001"],
+        "references": []
+      },
+      {
+        "name": "mlw-ml-training-prod-001",
+        "type": "Microsoft.MachineLearningServices/workspaces",
+        "location": "eastus",
+        "sku": "Basic",
+        "properties": {
+          "storageAccount": "${stmltrainingprod001.id}",
+          "keyVault": "${kv-ml-training-prod-001.id}",
+          "applicationInsights": "${appi-ml-training-prod-001.id}",
+          "containerRegistry": "${crmltrainingprod001.id}",
+          "hbiWorkspace": false,
+          "publicNetworkAccess": "Enabled"
+        },
+        "reasoning": {
+          "whyChosen": "The core orchestrator for the ML training pipeline.",
+          "alternativesConsidered": ["Azure Databricks"],
+          "tradeoffs": "AML provides a native, integrated experience for the full MLOps lifecycle."
+        },
+        "dependencies": [
+          "stmltrainingprod001",
+          "kv-ml-training-prod-001",
+          "appi-ml-training-prod-001",
+          "crmltrainingprod001"
+        ],
+        "references": []
+      },
+      {
+        "name": "cpu-cluster-001",
+        "type": "Microsoft.MachineLearningServices/workspaces/computes",
+        "location": "eastus",
+        "sku": "Standard_DS3_v2",
+        "properties": {
+          "computeType": "AmlCompute",
+          "properties": {
+            "scaleSettings": {
+              "maxNodeCount": 4,
+              "minNodeCount": 0,
+              "nodeIdleTimeBeforeScaleDown": "PT120S"
+            },
+            "vmPriority": "Dedicated"
+          }
+        },
+        "reasoning": {
+          "whyChosen": "Scalable compute target for running training jobs.",
+          "alternativesConsidered": ["Compute Instance", "AKS"],
+          "tradeoffs": "Clusters scale to zero to save costs when not in use."
+        },
+        "dependencies": ["mlw-ml-training-prod-001"],
+        "references": []
+      },
+      {
+        "name": "diag-mlw-audit",
+        "type": "Microsoft.Insights/diagnosticSettings",
+        "location": "eastus",
+        "sku": "N/A",
+        "properties": {
+          "workspaceId": "${log-ml-training-prod-001.id}",
+          "logs": [
+            { "category": "Audit", "enabled": true },
+            { "category": "AmlComputeClusterEvent", "enabled": true }
+          ],
+          "metrics": [
+            { "category": "AllMetrics", "enabled": true }
+          ]
+        },
+        "reasoning": {
+          "whyChosen": "Explicitly requested to enable audit logging for all training jobs.",
+          "alternativesConsidered": [],
+          "tradeoffs": "Incurs data ingestion costs in Log Analytics."
+        },
+        "dependencies": ["mlw-ml-training-prod-001", "log-ml-training-prod-001"],
+        "references": []
+      }
+    ]
+  }
+}

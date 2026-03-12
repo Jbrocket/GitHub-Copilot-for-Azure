@@ -1,0 +1,28 @@
+{
+  "overallScore": 0.88,
+  "dimensions": {
+    "goalAlignment": 0.95,
+    "wafConformance": 0.72,
+    "dependencyCompleteness": 0.92,
+    "deploymentViability": 0.92
+  },
+  "risks": [
+    "No Application Insights resource for monitoring Function App invocations, failures, and Cosmos DB dependency tracking",
+    "Consumption plan (Y1) cold starts may degrade webhook response latency for infrequent invocations",
+    "Cosmos DB publicNetworkAccess is Enabled with no VNet service endpoints or private endpoints configured",
+    "Key Vault publicNetworkAccess is Enabled with no network restrictions",
+    "Single-region deployment (eastus) with no zone redundancy or cross-region failover — Cosmos DB enableAutomaticFailover is false and Storage uses Standard_LRS",
+    "Cosmos DB accessed via key-based authentication stored in Key Vault rather than RBAC data-plane access with managed identity, increasing secret management overhead"
+  ],
+  "correctionsRecommended": [
+    "Add an Application Insights resource (Microsoft.Insights/components) and wire the APPLICATIONINSIGHTS_CONNECTION_STRING app setting into the Function App for end-to-end monitoring and diagnostics",
+    "Upgrade from Consumption plan (Y1) to Flex Consumption plan (FC1) per Azure Functions deployment best practices — FC1 supports VNet integration, availability zones, and network-restricted Key Vault references",
+    "Add Microsoft.Authorization/roleAssignments resources to grant the Function App managed identity the Key Vault Secrets User role on the Key Vault, which is required for Key Vault references to resolve at runtime",
+    "Consider replacing Cosmos DB key-based authentication with Cosmos DB RBAC data-plane access using the Function App managed identity to eliminate secret rotation overhead",
+    "Consider using a User-Assigned Managed Identity instead of SystemAssigned per IaC deployment best practices, including Storage Blob Data Owner, Storage Blob Data Contributor, Storage Queue Data Contributor, and Storage Table Data Contributor role assignments on the storage account",
+    "Add diagnostic settings (Microsoft.Insights/diagnosticSettings) on the Function App and Cosmos DB account for operational log retention",
+    "For production workloads, add VNet integration and private endpoints to restrict network access to Cosmos DB and Key Vault"
+  ],
+  "hardDependencies": [],
+  "deployable": 1
+}

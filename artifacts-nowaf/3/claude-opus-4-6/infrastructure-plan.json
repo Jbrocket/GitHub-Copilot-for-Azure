@@ -1,0 +1,310 @@
+{
+  "meta": {
+    "planId": "plan-eventdriven-aca-pipeline",
+    "generatedAt": "2026-03-11T12:50:19.348Z",
+    "version": "0.1-draft",
+    "status": "draft"
+  },
+  "inputs": {
+    "userGoal": "Provision an event-driven data processing pipeline using Azure Container Apps with Dapr Pub/Sub integration, connected to Azure Event Grid for event ingestion, and outputting processed results to Cosmos DB."
+  },
+  "plan": {
+    "architecturePrinciples": [
+      "Event-driven and loosely coupled",
+      "Serverless and consumption-based billing",
+      "Secure by default with managed identities",
+      "Observable via centralized logging"
+    ],
+    "resources": [
+      {
+        "name": "log-datapipeline-prod-001",
+        "type": "Microsoft.OperationalInsights/workspaces",
+        "location": "eastus",
+        "sku": "PerGB2018",
+        "properties": {
+          "retentionInDays": 30
+        },
+        "reasoning": {
+          "whyChosen": "Required by Container Apps Environment for centralized log ingestion and diagnostics. PerGB2018 is the recommended default for pay-as-you-go ingestion.",
+          "alternativesConsidered": [
+            "Azure Monitor destination directly (less query flexibility)",
+            "Free tier (limited to 500 MB/day and 7-day retention)"
+          ],
+          "tradeoffs": "PerGB2018 incurs per-GB cost but provides 30-day retention and full KQL query support."
+        },
+        "dependencies": [],
+        "dependencyReasoning": "No dependencies — foundational observability resource.",
+        "references": [
+          {
+            "title": "Log Analytics overview",
+            "url": "https://learn.microsoft.com/azure/azure-monitor/logs/log-analytics-overview"
+          },
+          {
+            "title": "Bicep resource reference (2025-02-01)",
+            "url": "https://learn.microsoft.com/azure/templates/microsoft.operationalinsights/workspaces?pivots=deployment-language-bicep"
+          }
+        ]
+      },
+      {
+        "name": "cae-datapipeline-prod-001",
+        "type": "Microsoft.App/managedEnvironments",
+        "location": "eastus",
+        "sku": "Consumption",
+        "properties": {
+          "appLogsConfiguration": {
+            "destination": "log-analytics"
+          },
+          "workloadProfiles": [
+            {
+              "workloadProfileType": "Consumption",
+              "name": "Consumption"
+            }
+          ]
+        },
+        "reasoning": {
+          "whyChosen": "Consumption-only environment provides serverless scale-to-zero for event-driven workloads, minimizing idle cost. Supports Dapr components natively for Pub/Sub integration.",
+          "alternativesConsidered": [
+            "Workload Profiles environment (not needed — no dedicated compute requirements)",
+            "Azure Kubernetes Service (over-provisioned for a single-service pipeline)"
+          ],
+          "tradeoffs": "Consumption-only lacks UDR support and NAT Gateway egress. Sufficient for default public-network scenarios."
+        },
+        "dependencies": [
+          "log-datapipeline-prod-001"
+        ],
+        "dependencyReasoning": "Requires Log Analytics Workspace customer ID and shared key for log ingestion configuration.",
+        "references": [
+          {
+            "title": "Container Apps environments overview",
+            "url": "https://learn.microsoft.com/azure/container-apps/environment"
+          },
+          {
+            "title": "Bicep resource reference (2025-01-01)",
+            "url": "https://learn.microsoft.com/azure/templates/microsoft.app/managedenvironments?pivots=deployment-language-bicep"
+          }
+        ]
+      },
+      {
+        "name": "evgt-datapipeline-prod-001",
+        "type": "Microsoft.EventGrid/topics",
+        "location": "eastus",
+        "sku": "Basic",
+        "properties": {
+          "inputSchema": "CloudEventSchemaV1_0",
+          "publicNetworkAccess": "Enabled"
+        },
+        "reasoning": {
+          "whyChosen": "Event Grid provides serverless event routing with native CloudEvents support, ideal for decoupled event-driven pipelines. Basic SKU is cost-effective for standard event routing without private endpoint requirements. CloudEvents schema chosen for Dapr compatibility.",
+          "alternativesConsidered": [
+            "Azure Service Bus (richer messaging but higher cost and complexity for simple pub/sub)",
+            "Azure Event Hubs (designed for high-throughput streaming — overkill for event routing)"
+          ],
+          "tradeoffs": "Basic SKU does not support private endpoints. Upgrade to Premium if network isolation is required."
+        },
+        "dependencies": [],
+        "dependencyReasoning": "No dependencies — standalone event ingestion endpoint.",
+        "references": [
+          {
+            "title": "Event Grid overview",
+            "url": "https://learn.microsoft.com/azure/event-grid/overview"
+          },
+          {
+            "title": "Bicep resource reference (2025-02-15)",
+            "url": "https://learn.microsoft.com/azure/templates/microsoft.eventgrid/topics?pivots=deployment-language-bicep"
+          }
+        ]
+      },
+      {
+        "name": "cosmos-datapipeline-prod-001",
+        "type": "Microsoft.DocumentDB/databaseAccounts",
+        "location": "eastus",
+        "sku": "Serverless",
+        "properties": {
+          "kind": "GlobalDocumentDB",
+          "databaseAccountOfferType": "Standard",
+          "capabilities": [
+            {
+              "name": "EnableServerless"
+            }
+          ],
+          "consistencyPolicy": {
+            "defaultConsistencyLevel": "Session"
+          },
+          "locations": [
+            {
+              "locationName": "eastus",
+              "failoverPriority": 0
+            }
+          ],
+          "publicNetworkAccess": "Enabled"
+        },
+        "reasoning": {
+          "whyChosen": "Cosmos DB NoSQL API with serverless capacity mode provides pay-per-request billing, ideal for event-driven workloads with variable throughput. Session consistency balances performance and data freshness for pipeline output reads.",
+          "alternativesConsidered": [
+            "Provisioned throughput Cosmos DB (predictable cost but requires capacity planning)",
+            "Azure SQL Database (relational model unnecessary for pipeline output documents)",
+            "Azure Table Storage (lower cost but limited query capabilities)"
+          ],
+          "tradeoffs": "Serverless is single-region only and cannot use multi-region writes or shared-throughput databases. Suitable for non-critical pipeline output storage."
+        },
+        "dependencies": [],
+        "dependencyReasoning": "No dependencies — standalone data store.",
+        "references": [
+          {
+            "title": "Cosmos DB overview",
+            "url": "https://learn.microsoft.com/azure/cosmos-db/introduction"
+          },
+          {
+            "title": "Bicep resource reference (2025-04-15)",
+            "url": "https://learn.microsoft.com/azure/templates/microsoft.documentdb/databaseaccounts?pivots=deployment-language-bicep"
+          },
+          {
+            "title": "Serverless capacity mode",
+            "url": "https://learn.microsoft.com/azure/cosmos-db/serverless"
+          }
+        ]
+      },
+      {
+        "name": "dapr-pubsub-eventgrid",
+        "type": "Microsoft.App/managedEnvironments/daprComponents",
+        "location": "eastus",
+        "sku": "N/A",
+        "properties": {
+          "componentType": "pubsub.azure.eventgrid",
+          "version": "v1",
+          "metadata": [
+            {
+              "name": "accessKey",
+              "secretRef": "eventgrid-access-key"
+            },
+            {
+              "name": "topicEndpoint",
+              "value": "[reference evgt-datapipeline-prod-001 endpoint]"
+            }
+          ],
+          "scopes": [
+            "ca-processor-prod-001"
+          ]
+        },
+        "reasoning": {
+          "whyChosen": "Dapr Pub/Sub component for Azure Event Grid provides a standardized messaging abstraction, decoupling application code from the Event Grid SDK. Enables CloudEvents-based publish/subscribe natively within Container Apps.",
+          "alternativesConsidered": [
+            "Direct Event Grid SDK integration in app code (tighter coupling, more boilerplate)",
+            "Dapr Pub/Sub with Azure Service Bus (higher cost for simple event routing)"
+          ],
+          "tradeoffs": "Dapr adds a sidecar per container app, consuming additional CPU/memory. The abstraction benefit outweighs the overhead for event-driven architectures."
+        },
+        "dependencies": [
+          "cae-datapipeline-prod-001",
+          "evgt-datapipeline-prod-001"
+        ],
+        "dependencyReasoning": "Dapr component is a child resource of the Container Apps Environment and requires the Event Grid Topic endpoint and access key.",
+        "references": [
+          {
+            "title": "Dapr Pub/Sub with Azure Event Grid",
+            "url": "https://learn.microsoft.com/azure/container-apps/dapr-component-connection"
+          },
+          {
+            "title": "Dapr components in Container Apps",
+            "url": "https://learn.microsoft.com/azure/container-apps/dapr-overview"
+          }
+        ]
+      },
+      {
+        "name": "ca-processor-prod-001",
+        "type": "Microsoft.App/containerApps",
+        "location": "eastus",
+        "sku": "Consumption",
+        "properties": {
+          "configuration": {
+            "dapr": {
+              "enabled": true,
+              "appId": "processor",
+              "appPort": 3000,
+              "appProtocol": "http"
+            },
+            "ingress": {
+              "external": false,
+              "targetPort": 3000,
+              "transport": "auto"
+            },
+            "activeRevisionsMode": "Single",
+            "secrets": [
+              {
+                "name": "eventgrid-access-key",
+                "value": "[Event Grid Topic access key]"
+              },
+              {
+                "name": "cosmos-connection-string",
+                "value": "[Cosmos DB connection string]"
+              }
+            ]
+          },
+          "template": {
+            "containers": [
+              {
+                "name": "processor",
+                "image": "mcr.microsoft.com/azuredocs/containerapps-helloworld:latest",
+                "resources": {
+                  "cpu": 0.5,
+                  "memory": "1Gi"
+                }
+              }
+            ],
+            "scale": {
+              "minReplicas": 0,
+              "maxReplicas": 10
+            }
+          }
+        },
+        "reasoning": {
+          "whyChosen": "Container App with Dapr enabled subscribes to Event Grid events via Pub/Sub, processes data, and writes results to Cosmos DB. Scale-to-zero on Consumption profile ensures zero idle cost. Internal-only ingress since the app receives events via Dapr sidecar, not external HTTP.",
+          "alternativesConsidered": [
+            "Azure Functions with Event Grid trigger (simpler but less portable and no Dapr abstraction)",
+            "AKS pod with Dapr (over-provisioned for a single processing workload)"
+          ],
+          "tradeoffs": "Placeholder image must be replaced with the actual processing application image. 0.5 CPU / 1Gi memory is suitable for moderate processing; scale up resources for heavier workloads."
+        },
+        "dependencies": [
+          "cae-datapipeline-prod-001",
+          "dapr-pubsub-eventgrid",
+          "cosmos-datapipeline-prod-001"
+        ],
+        "dependencyReasoning": "Requires the Container Apps Environment for hosting, the Dapr Pub/Sub component for event subscription, and the Cosmos DB account for output storage.",
+        "references": [
+          {
+            "title": "Container Apps overview",
+            "url": "https://learn.microsoft.com/azure/container-apps/overview"
+          },
+          {
+            "title": "Bicep resource reference (2025-01-01)",
+            "url": "https://learn.microsoft.com/azure/templates/microsoft.app/containerapps?pivots=deployment-language-bicep"
+          },
+          {
+            "title": "Dapr integration with Container Apps",
+            "url": "https://learn.microsoft.com/azure/container-apps/dapr-overview"
+          }
+        ]
+      }
+    ],
+    "overallReasoning": {
+      "summary": "This architecture uses a fully serverless, event-driven pipeline. Azure Event Grid ingests events via a custom topic with CloudEvents schema. A Dapr Pub/Sub component on the Container Apps Environment bridges Event Grid to the Container App processor. The processor app scales from zero based on event volume and writes results to a serverless Cosmos DB NoSQL database. All components use consumption/serverless billing to minimize cost during low activity.",
+      "tradeoffs": "All resources use public network access — suitable for development and non-sensitive workloads. For production with sensitive data, upgrade Event Grid to Premium SKU for private endpoints, add VNet integration to the Container Apps Environment, and disable public network access on Cosmos DB. Serverless Cosmos DB is single-region only, which limits disaster recovery options."
+    },
+    "validation": "All resources are deployed to the same region (eastus). Container App references the Container Apps Environment via environmentId. Dapr Pub/Sub component is scoped to the processor app and references the Event Grid Topic endpoint. Cosmos DB serverless is configured as single-region with Session consistency (no conflicting multi-region or Strong consistency settings). Log Analytics is wired to the Container Apps Environment for centralized logging. No subnet/VNet conflicts as this is a public-network deployment.",
+    "references": [
+      {
+        "title": "Event-driven architecture style",
+        "url": "https://learn.microsoft.com/azure/architecture/guide/architecture-styles/event-driven"
+      },
+      {
+        "title": "Serverless event processing with Container Apps",
+        "url": "https://learn.microsoft.com/azure/container-apps/overview"
+      },
+      {
+        "title": "Dapr Pub/Sub building block",
+        "url": "https://docs.dapr.io/developing-applications/building-blocks/pubsub/"
+      }
+    ]
+  }
+}

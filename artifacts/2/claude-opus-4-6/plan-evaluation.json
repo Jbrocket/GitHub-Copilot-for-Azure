@@ -1,0 +1,29 @@
+{
+  "overallScore": 0.89,
+  "dimensions": {
+    "goalAlignment": 0.93,
+    "wafConformance": 0.82,
+    "dependencyCompleteness": 0.88,
+    "deploymentViability": 0.95
+  },
+  "risks": [
+    "Public network access enabled on Cosmos DB, Redis, and ACR — production e-commerce workloads should use private endpoints to reduce attack surface",
+    "Single-region deployment with no multi-region disaster recovery — a regional outage would take down the entire e-commerce backend",
+    "Private endpoints subnet (snet-privateendpoints-001) is defined but no private endpoint resources are included in the plan",
+    "No explicit RBAC role assignment resources (acrPull on ACR, Key Vault Secrets User on KV) — these are mentioned in reasoning but missing as plan resources",
+    "No Microsoft Defender for Containers integration — WAF guidance recommends runtime threat detection for production AKS clusters",
+    "30-day Log Analytics retention may be insufficient for PCI-DSS or other e-commerce compliance requirements",
+    "AKS API server is public — payment service workloads handling sensitive financial data should use a private cluster or API server authorized IP ranges"
+  ],
+  "correctionsRecommended": [
+    "Add private endpoint resources for Cosmos DB, Redis, Key Vault, and ACR targeting snet-privateendpoints-001; disable publicNetworkAccess on each service after private endpoints are configured",
+    "Add explicit Microsoft.Authorization/roleAssignments resources: acrPull role on ACR and Key Vault Secrets User role on Key Vault for the AKS managed identity",
+    "Enable Microsoft Defender for Containers on the AKS cluster for runtime threat detection and vulnerability scanning",
+    "Consider configuring a private AKS cluster or API server authorized IP ranges to restrict control plane access",
+    "Add a resource tagging strategy (environment, service, cost-center, owner) across all resources for governance and cost tracking",
+    "Evaluate increasing Log Analytics workspace retention from 30 to 90 days for compliance with e-commerce payment processing standards",
+    "Consider adding Azure Front Door or Application Gateway with WAF capability in front of Istio ingress gateway for L7 DDoS protection and web application firewall"
+  ],
+  "hardDependencies": [],
+  "deployable": 1
+}

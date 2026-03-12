@@ -1,0 +1,27 @@
+{
+  "overallScore": 0.86,
+  "dimensions": {
+    "goalAlignment": 0.92,
+    "wafConformance": 0.82,
+    "dependencyCompleteness": 0.82,
+    "deploymentViability": 0.85
+  },
+  "risks": [
+    "Dual ingress pattern (AGIC + Istio Ingress Gateway) requires careful traffic separation — AGIC manages north-south through Application Gateway while Istio handles east-west service mesh traffic; misconfiguration can cause routing conflicts",
+    "Key Vault has publicNetworkAccess disabled but no VNet dependency or private endpoint resource is included in the plan, potentially blocking runtime secret access from AKS workloads",
+    "ACR Standard SKU lacks private link and geo-replication support; Premium SKU is needed for private endpoint integration with AKS in a fully private network topology",
+    "No explicit AKS availability zone configuration on node pools; zone-redundant PostgreSQL without zone-spread AKS nodes creates asymmetric resilience",
+    "No Application Insights resource for application-level distributed tracing and telemetry across catalog, order, and payment microservices",
+    "AKS cluster autoscaler is not configured — fixed 3-node user pool may under- or over-provision during traffic spikes"
+  ],
+  "correctionsRecommended": [
+    "Add dependency from aks-ecommerce-prod-001 to law-ecommerce-prod-001 for Log Analytics monitoring integration",
+    "Add dependency from kv-ecommerce-prod-001 to vnet-ecommerce-prod-001, or include a private endpoint resource for Key Vault to enable access from the private AKS cluster",
+    "Consider upgrading ACR from Standard to Premium SKU to enable private link and geo-replication for production workloads",
+    "Add an Application Insights resource connected to the Log Analytics Workspace for distributed tracing across microservices",
+    "Configure AKS node pool availability zones to match PostgreSQL zone-redundant HA for consistent resilience",
+    "Document the AGIC and Istio ingress separation strategy — AGIC for external API traffic, Istio for inter-service mesh routing"
+  ],
+  "hardDependencies": [],
+  "deployable": 1
+}

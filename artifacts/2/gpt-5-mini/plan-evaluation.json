@@ -1,0 +1,32 @@
+{
+  "overallScore": 0.71,
+  "dimensions": {
+    "goalAlignment": 0.75,
+    "wafConformance": 0.7,
+    "dependencyCompleteness": 0.65,
+    "deploymentViability": 0.75
+  },
+  "risks": [
+    "Pod Identity (aad-pod-identity) is deprecated as of 10/2022; plan references podIdentity which will not receive updates or support",
+    "Open Service Mesh (OSM) is retired; relying on it introduces long-term maintenance risk",
+    "AKS subnet 10.0.0.0/24 provides only 251 usable IPs; with Azure CNI (default 30 pods/node), 3 nodes consume ~93 IPs leaving limited headroom for scaling or upgrades",
+    "Application Gateway is referenced in ingress notes but is not defined as a resource, so AGIC cannot be configured without manual addition",
+    "No availability zone configuration for AKS node pools or other resources, reducing resilience to datacenter-level failures",
+    "AKS API server is publicly accessible by default; no private cluster or authorized IP range configuration is specified",
+    "No explicit managed identity or role assignment definitions (e.g., acrpull for kubelet identity to ACR)"
+  ],
+  "correctionsRecommended": [
+    "Replace podIdentity with Microsoft Entra Workload Identity (workload-identity-overview) for secure pod-to-Azure-resource access",
+    "Replace Open Service Mesh with the Istio-based service mesh add-on for AKS, which is the supported alternative",
+    "Add Application Gateway as an explicit resource with a dedicated subnet (e.g., 10.0.1.0/24) if AGIC is intended",
+    "Expand AKS subnet from /24 to /22 or larger to provide scaling headroom for Azure CNI networking",
+    "Add availability zone configuration (zones: [1,2,3]) to AKS node pools for zone-redundant resilience",
+    "Configure private AKS cluster or add API server authorized IP ranges to limit public exposure",
+    "Define managed identity resources and AcrPull role assignment from AKS kubelet identity to ACR",
+    "Add service CIDR and DNS service IP explicitly to avoid potential overlap with future VNet expansions"
+  ],
+  "hardDependencies": [
+    "Application Gateway requires a dedicated subnet not shared with AKS; if AGIC ingress is used, a separate subnet must be provisioned before deployment"
+  ],
+  "deployable": 1
+}

@@ -1,0 +1,30 @@
+{
+  "overallScore": 0.67,
+  "dimensions": {
+    "goalAlignment": 0.75,
+    "wafConformance": 0.7,
+    "dependencyCompleteness": 0.55,
+    "deploymentViability": 0.65
+  },
+  "risks": [
+    "Storage account encryption is set to MicrosoftManaged, contradicting the stated CMK requirement for encrypted outputs",
+    "ADLSv2 (hierarchicalNamespace: true) cannot be used as the default storage account for Azure ML workspace per Azure documentation",
+    "Application Insights resource is missing; it is a required associated resource for Azure ML workspace creation",
+    "No separate standard storage account (without HNS) defined for the Azure ML workspace default storage",
+    "No managed identity resource defined in plan.resources despite being referenced in the security section",
+    "Network defaults to public endpoints with no VNet isolation for ML workspace or storage"
+  ],
+  "correctionsRecommended": [
+    "Change storage account encryption from MicrosoftManaged to CustomerManaged and reference Key Vault kv-secure-ml for CMK",
+    "Add a separate standard StorageAccount (without hierarchicalNamespace) as the Azure ML workspace default storage",
+    "Add an Application Insights resource linked to the Log Analytics workspace la-audit-logs for ML workspace monitoring",
+    "Add a User-Assigned Managed Identity resource for service-to-service authentication between ML workspace, storage, and Key Vault",
+    "Add a Container Registry resource for custom ML training environments and Docker image management",
+    "Disable storage account local auth (key access) and public blob access per Azure security best practices",
+    "Add explicit dependency links between the Azure ML workspace and its associated resources (storage, key vault, application insights)"
+  ],
+  "hardDependencies": [
+    "Azure ML workspace requires an associated non-HNS storage account and Application Insights instance; neither is present or correctly linked in the current plan"
+  ],
+  "deployable": 1
+}

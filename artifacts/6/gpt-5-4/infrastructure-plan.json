@@ -1,0 +1,249 @@
+{
+  "meta": {
+    "planId": "plan-sales-data-pipeline",
+    "generatedAt": "2026-03-11T12:56:48.883Z",
+    "version": "0.1-draft",
+    "status": "draft"
+  },
+  "inputs": {
+    "userGoal": "Launch a data ingestion pipeline using Azure Data Factory for importing sales data daily, transform using Azure Databricks, and store results in Azure Synapse Analytics."
+  },
+  "plan": {
+    "architecturePrinciples": [
+      "Secure by default — managed identities, RBAC, Key Vault for secrets",
+      "Scalable — serverless Data Factory, auto-scaling Databricks, elastic Synapse SQL",
+      "Cost-efficient — pay-per-use ADF, smallest DWU for Synapse, standard-tier Databricks",
+      "Separation of concerns — ingest (ADF), transform (Databricks), serve (Synapse)"
+    ],
+    "resources": [
+      {
+        "name": "stdatapipelineprod001",
+        "type": "Microsoft.Storage/storageAccounts",
+        "subtype": "ADLS Gen2 (Blob with HNS)",
+        "location": "eastus2",
+        "sku": "Standard_LRS",
+        "properties": {
+          "kind": "StorageV2",
+          "accessTier": "Hot",
+          "isHnsEnabled": true,
+          "supportsHttpsTrafficOnly": true,
+          "minimumTlsVersion": "TLS1_2",
+          "allowBlobPublicAccess": false
+        },
+        "reasoning": {
+          "whyChosen": "ADLS Gen2 (HNS-enabled StorageV2) is required by Azure Synapse as its default data lake storage and serves as the landing zone for raw sales data ingested by ADF. Hierarchical namespace enables efficient directory-level operations for data lake patterns.",
+          "alternativesConsidered": [
+            "Azure Blob Storage (non-HNS) — insufficient for Synapse requirement and lacks directory-level ACLs",
+            "Azure Data Lake Storage Gen1 — deprecated, not supported by Synapse"
+          ],
+          "tradeoffs": "Standard_LRS provides no cross-region redundancy but is cost-effective for a single-region pipeline. Upgrade to Standard_GRS if DR is needed."
+        },
+        "dependencies": [],
+        "dependencyReasoning": "No dependencies — foundational storage resource.",
+        "references": [
+          {
+            "title": "Storage account overview",
+            "url": "https://learn.microsoft.com/azure/storage/common/storage-account-overview"
+          },
+          {
+            "title": "ADLS Gen2 introduction",
+            "url": "https://learn.microsoft.com/azure/storage/blobs/data-lake-storage-introduction"
+          }
+        ]
+      },
+      {
+        "name": "kv-datapipeline-prod-001",
+        "type": "Microsoft.KeyVault/vaults",
+        "location": "eastus2",
+        "sku": "standard",
+        "properties": {
+          "enableSoftDelete": true,
+          "enablePurgeProtection": true,
+          "enableRbacAuthorization": true,
+          "softDeleteRetentionInDays": 90,
+          "publicNetworkAccess": "Enabled"
+        },
+        "reasoning": {
+          "whyChosen": "Key Vault secures SQL admin credentials for Synapse, connection strings, and any secrets required by ADF linked services or Databricks. RBAC authorization is preferred over access policies per Azure best practices.",
+          "alternativesConsidered": [
+            "Storing secrets in ADF directly — not recommended, secrets should be centralized",
+            "Azure App Configuration — suited for feature flags/config, not secret management"
+          ],
+          "tradeoffs": "Purge protection enabled per best practices; this means deleted secrets cannot be purged during the retention period."
+        },
+        "dependencies": [],
+        "dependencyReasoning": "No dependencies — foundational security resource.",
+        "references": [
+          {
+            "title": "Key Vault overview",
+            "url": "https://learn.microsoft.com/azure/key-vault/general/overview"
+          },
+          {
+            "title": "Key Vault best practices",
+            "url": "https://learn.microsoft.com/azure/key-vault/general/best-practices"
+          }
+        ]
+      },
+      {
+        "name": "adf-salespipeline-prod-eastus2-001",
+        "type": "Microsoft.DataFactory/factories",
+        "location": "eastus2",
+        "sku": "N/A",
+        "properties": {
+          "publicNetworkAccess": "Enabled",
+          "identity": "SystemAssigned"
+        },
+        "reasoning": {
+          "whyChosen": "Azure Data Factory provides serverless, code-free ETL/ELT orchestration with built-in connectors for ADLS Gen2, Databricks, and Synapse. Pay-per-activity-run pricing is ideal for a daily scheduled pipeline. System-assigned managed identity enables secure, passwordless access to linked resources.",
+          "alternativesConsidered": [
+            "Azure Synapse Pipelines — similar capability but couples orchestration with analytics; ADF provides a dedicated orchestration layer",
+            "Azure Logic Apps — better for event-driven workflows, not optimized for data movement"
+          ],
+          "tradeoffs": "No fixed SKU cost — pay only for pipeline activity runs, data movement, and integration runtime hours. Global naming required."
+        },
+        "dependencies": [
+          "stdatapipelineprod001",
+          "kv-datapipeline-prod-001"
+        ],
+        "dependencyReasoning": "ADF needs the storage account as a linked service destination for landing raw data, and Key Vault for storing connection secrets. ADF managed identity requires Storage Blob Data Contributor role on the storage account.",
+        "references": [
+          {
+            "title": "Azure Data Factory overview",
+            "url": "https://learn.microsoft.com/azure/data-factory/introduction"
+          },
+          {
+            "title": "ADF Bicep resource reference",
+            "url": "https://learn.microsoft.com/azure/templates/microsoft.datafactory/factories?pivots=deployment-language-bicep"
+          }
+        ]
+      },
+      {
+        "name": "dbw-salestransform-prod-eastus2-001",
+        "type": "Microsoft.Databricks/workspaces",
+        "location": "eastus2",
+        "sku": "premium",
+        "properties": {
+          "managedResourceGroupName": "rg-databricks-managed-prod-eastus2-001",
+          "parameters": {
+            "enableNoPublicIp": false
+          }
+        },
+        "reasoning": {
+          "whyChosen": "Azure Databricks provides Apache Spark-based transformation at scale. Premium tier enables RBAC, credential passthrough, and Databricks secrets scope backed by Key Vault — essential for secure enterprise data pipelines. ADF has native Databricks activity support for orchestrating notebook-based transformations.",
+          "alternativesConsidered": [
+            "Synapse Spark Pools — tightly coupled with Synapse but less mature Spark ecosystem and tooling than Databricks",
+            "HDInsight — more operational overhead for cluster management",
+            "ADF Mapping Data Flows — limited for complex transformations requiring custom code"
+          ],
+          "tradeoffs": "Premium SKU is more expensive than Standard but provides necessary security features (RBAC, Key Vault-backed secrets). Compute costs are per-cluster and configurable via job clusters for cost optimization."
+        },
+        "dependencies": [
+          "stdatapipelineprod001",
+          "kv-datapipeline-prod-001"
+        ],
+        "dependencyReasoning": "Databricks reads raw data from and writes transformed data to the ADLS Gen2 storage account. Key Vault is used for Databricks secret scopes to securely access credentials.",
+        "references": [
+          {
+            "title": "Azure Databricks overview",
+            "url": "https://learn.microsoft.com/azure/databricks/introduction/index"
+          },
+          {
+            "title": "Databricks Bicep resource reference",
+            "url": "https://learn.microsoft.com/azure/templates/microsoft.databricks/workspaces"
+          }
+        ]
+      },
+      {
+        "name": "synw-salesanalytics-prod-eastus2-001",
+        "type": "Microsoft.Synapse/workspaces",
+        "location": "eastus2",
+        "sku": "N/A",
+        "properties": {
+          "defaultDataLakeStorage": {
+            "accountUrl": "https://stdatapipelineprod001.dfs.core.windows.net",
+            "filesystem": "synapse"
+          },
+          "sqlAdministratorLogin": "sqladminuser",
+          "publicNetworkAccess": "Enabled",
+          "managedVirtualNetwork": "",
+          "identity": "SystemAssigned"
+        },
+        "reasoning": {
+          "whyChosen": "Azure Synapse Analytics provides a unified analytics workspace with dedicated SQL pools for high-performance data warehousing. It natively integrates with ADLS Gen2 as its default data lake and supports both serverless and dedicated SQL query patterns for serving transformed sales data.",
+          "alternativesConsidered": [
+            "Azure SQL Database — lacks massively parallel processing (MPP) for large-scale analytics",
+            "Azure SQL Managed Instance — not designed for data warehousing workloads",
+            "Microsoft Fabric — newer platform but Synapse is the established choice for dedicated SQL pool warehousing"
+          ],
+          "tradeoffs": "Workspace itself has no SKU cost; costs come from child SQL/Spark pools. SQL admin password must be stored in Key Vault and passed securely during deployment."
+        },
+        "dependencies": [
+          "stdatapipelineprod001",
+          "kv-datapipeline-prod-001"
+        ],
+        "dependencyReasoning": "Synapse requires an ADLS Gen2 storage account (with HNS enabled) as its default data lake. Synapse managed identity needs Storage Blob Data Contributor role on the storage account. Key Vault stores the SQL admin password.",
+        "references": [
+          {
+            "title": "Azure Synapse Analytics overview",
+            "url": "https://learn.microsoft.com/azure/synapse-analytics/overview-what-is"
+          },
+          {
+            "title": "Synapse Bicep resource reference",
+            "url": "https://learn.microsoft.com/azure/templates/microsoft.synapse/workspaces?pivots=deployment-language-bicep"
+          }
+        ]
+      },
+      {
+        "name": "sqldw-sales-prod-001",
+        "type": "Microsoft.Synapse/workspaces/sqlPools",
+        "location": "eastus2",
+        "sku": "DW100c",
+        "properties": {
+          "collation": "SQL_Latin1_General_CP1_CI_AS",
+          "createMode": "Default"
+        },
+        "reasoning": {
+          "whyChosen": "A dedicated SQL pool (formerly SQL DW) provides MPP-based data warehousing for storing and querying transformed sales data. DW100c is the smallest compute tier, suitable for development and initial workloads — can be scaled up as data volume and query concurrency grow.",
+          "alternativesConsidered": [
+            "Synapse Serverless SQL — pay-per-query model good for ad-hoc but less predictable for consistent daily workloads",
+            "DW200c or higher — more compute but unnecessary at the start"
+          ],
+          "tradeoffs": "DW100c has limited concurrency (4 concurrent queries max at this tier). Scale up to DW200c+ when query patterns demand it. Can be paused when not in use to save costs."
+        },
+        "dependencies": [
+          "synw-salesanalytics-prod-eastus2-001"
+        ],
+        "dependencyReasoning": "SQL pool is a child resource of the Synapse workspace and must be created after the workspace exists.",
+        "references": [
+          {
+            "title": "Dedicated SQL pool overview",
+            "url": "https://learn.microsoft.com/azure/synapse-analytics/sql-data-warehouse/sql-data-warehouse-overview-what-is"
+          },
+          {
+            "title": "Synapse SQL pool Bicep reference",
+            "url": "https://learn.microsoft.com/azure/templates/microsoft.synapse/workspaces/sqlpools"
+          }
+        ]
+      }
+    ],
+    "overallReasoning": {
+      "summary": "This architecture follows a classic ELT (Extract-Load-Transform) pattern: Azure Data Factory ingests raw sales data daily into ADLS Gen2, Azure Databricks performs transformations using Apache Spark, and results are loaded into an Azure Synapse Analytics dedicated SQL pool for analytics and reporting. Key Vault centralizes secret management. All services use managed identities and RBAC for secure, passwordless inter-service communication.",
+      "tradeoffs": "Single-region deployment (eastus2) with LRS storage — no built-in disaster recovery. Databricks Premium adds cost but is needed for enterprise security features. DW100c is minimal compute — scale up as usage grows. Consider adding monitoring (Log Analytics / Azure Monitor) and networking (VNet / Private Endpoints) for production hardening."
+    },
+    "validation": "All resources deploy to eastus2 where ADF, Databricks, Synapse, Storage, and Key Vault are available. ADLS Gen2 storage satisfies Synapse's HNS requirement. ADF managed identity can be granted Storage Blob Data Contributor and Key Vault Secrets User roles. Databricks premium SKU supports Key Vault-backed secret scopes. Synapse SQL pool DW100c is the minimum DWU tier. No circular dependencies — dependency graph is a DAG.",
+    "references": [
+      {
+        "title": "Modern data warehouse architecture",
+        "url": "https://learn.microsoft.com/azure/architecture/solution-ideas/articles/modern-data-warehouse"
+      },
+      {
+        "title": "Enterprise data warehouse with ADF and Synapse",
+        "url": "https://learn.microsoft.com/azure/architecture/example-scenario/data/enterprise-data-warehouse"
+      },
+      {
+        "title": "Azure Data Factory + Databricks integration",
+        "url": "https://learn.microsoft.com/azure/data-factory/transform-data-using-databricks-notebook"
+      }
+    ]
+  }
+}

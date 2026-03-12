@@ -1,0 +1,101 @@
+{
+  "meta": {
+    "planId": "plan-sales-data-pipeline",
+    "generatedAt": "2026-03-12T00:00:00Z",
+    "version": "1.0",
+    "status": "draft"
+  },
+  "inputs": {
+    "userGoal": "Launch a data ingestion pipeline using Azure Data Factory for importing sales data daily, transform using Azure Databricks, and store results in Azure Synapse Analytics."
+  },
+  "plan": {
+    "resources": [
+      {
+        "name": "stsalesdata",
+        "type": "Microsoft.Storage/storageAccounts",
+        "subtype": "Data Lake Gen2",
+        "location": "eastus",
+        "sku": "Standard_LRS",
+        "properties": {
+          "kind": "StorageV2",
+          "isHnsEnabled": true
+        },
+        "reasoning": {
+          "whyChosen": "Required for Synapse and ADF staging/logging. HNS enabled for Data Lake capabilities.",
+          "alternativesConsidered": ["Blob Storage (non-HNS)"],
+          "tradeoffs": "Standard SKU is cost-effective for default usage."
+        },
+        "dependencies": [],
+        "references": []
+      },
+      {
+        "name": "adf-sales-ingest",
+        "type": "Microsoft.DataFactory/factories",
+        "location": "eastus",
+        "sku": "DataFactory",
+        "reasoning": {
+            "whyChosen": "Requested by user for data ingestion orchestration.",
+            "alternativesConsidered": ["Synapse Pipelines"],
+            "tradeoffs": "Separate service allows independent scaling/lifecycle management vs Synapse integration."
+        },
+        "dependencies": [],
+        "references": []
+      },
+      {
+        "name": "dbw-sales-transform",
+        "type": "Microsoft.Databricks/workspaces",
+        "location": "eastus",
+        "sku": "standard",
+        "reasoning": {
+            "whyChosen": "Requested by user for transformation. Standard SKU is sufficient for basic jobs.",
+            "alternativesConsidered": ["Premium"],
+            "tradeoffs": "Standard lacks some advanced security features (e.g., VNet injection restrictions) but is cheaper."
+        },
+        "dependencies": [],
+        "references": []
+      },
+      {
+        "name": "syn-sales-analytics",
+        "type": "Microsoft.Synapse/workspaces",
+        "location": "eastus",
+        "sku": "Default",
+        "properties": {
+             "defaultDataLakeStorage": {
+                 "accountUrl": "https://stsalesdata.dfs.core.windows.net",
+                 "filesystem": "users"
+             },
+             "sqlAdministratorLogin": "sqladminuser"
+        },
+        "reasoning": {
+            "whyChosen": "Central analytics workspace for SQL and Spark. Required for SQL Pool.",
+            "alternativesConsidered": [],
+            "tradeoffs": "Workspace overhead."
+        },
+        "dependencies": ["stsalesdata"],
+        "dependencyReasoning": "Requires a default Data Lake Storage account.",
+        "references": []
+      },
+      {
+        "name": "syndp-sales",
+        "type": "Microsoft.Synapse/workspaces/sqlPools",
+        "location": "eastus",
+        "sku": "DW100c",
+        "reasoning": {
+            "whyChosen": "Dedicated SQL Pool for storing analytical results as requested. DW100c is the entry level.",
+            "alternativesConsidered": ["Serverless SQL"],
+            "tradeoffs": "Dedicated cost vs Serverless pay-per-query. Dedicated offers predictable performance."
+        },
+        "dependencies": ["syn-sales-analytics"],
+        "dependencyReasoning": "Child resource of Synapse Workspace.",
+        "references": []
+      }
+    ],
+    "overallReasoning": {
+      "summary": "Standard modern data warehouse architecture: Ingest (ADF) -> Lake (Storage) -> Transform (Databricks) -> Serve (Synapse SQL).",
+      "tradeoffs": "Separate ADF and Synapse instances adds complexity vs all-in-Synapse. Databricks adds another compute engine to manage."
+    },
+    "validation": "Valid architecture pattern.",
+    "architecturePrinciples": ["Decoupled compute/storage", "PaaS-first"],
+    "references": []
+  }
+}

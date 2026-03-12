@@ -1,0 +1,27 @@
+{
+  "overallScore": 0.76,
+  "dimensions": {
+    "goalAlignment": 0.82,
+    "wafConformance": 0.62,
+    "dependencyCompleteness": 0.72,
+    "deploymentViability": 0.88
+  },
+  "risks": [
+    "Event Grid is a Tier 2 Dapr binding component in Container Apps, not a native Pub/Sub component — Dapr Pub/Sub integration with Event Grid may require binding configuration instead of pub/sub",
+    "No managed identity configured for the Container App to authenticate to Cosmos DB or Event Grid — plan relies on implicit key-based access",
+    "Public network access is enabled on both Cosmos DB and Event Grid with no network isolation or private endpoints",
+    "Single-region deployment (eastus) with no zone redundancy on Cosmos DB (isZoneRedundant: false) — unsuitable for mission-critical workloads",
+    "Placeholder container image (containerapps-helloworld:latest) must be replaced before production use",
+    "No Dapr component resources (Microsoft.App/managedEnvironments/daprComponents) defined to wire the Container App to Event Grid and Cosmos DB via Dapr"
+  ],
+  "correctionsRecommended": [
+    "Add Microsoft.App/managedEnvironments/daprComponents resources for Event Grid binding and Cosmos DB state store to complete the Dapr integration wiring",
+    "Add an Event Grid subscription resource (Microsoft.EventGrid/eventSubscriptions) to route events from the topic to the Container App endpoint",
+    "Add a user-assigned managed identity with RBAC role assignments for Cosmos DB (Cosmos DB Built-in Data Contributor) and Event Grid (EventGrid Data Sender)",
+    "Consider Azure Service Bus or Event Hubs as the Dapr Pub/Sub component instead of Event Grid, since these are Tier 1 supported pub/sub components in Container Apps",
+    "Add Azure Key Vault for secrets management rather than relying on Log Analytics shared keys",
+    "For production hardening, disable public network access on Cosmos DB and add VNet integration to the Container Apps Environment"
+  ],
+  "hardDependencies": [],
+  "deployable": 1
+}

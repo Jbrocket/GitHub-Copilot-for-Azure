@@ -1,0 +1,29 @@
+{
+  "overallScore": 0.9,
+  "dimensions": {
+    "goalAlignment": 0.95,
+    "wafConformance": 0.8,
+    "dependencyCompleteness": 0.93,
+    "deploymentViability": 0.92
+  },
+  "risks": [
+    "SQL MI General Purpose tier does not support zone redundancy; a single-zone failure could impact database availability while the presentation and app tiers are zone-redundant",
+    "No diagnostic settings resources linking VMSS, Load Balancer, NSGs, or SQL MI to the Log Analytics workspace — monitoring will not be functional out of the box",
+    "Key Vault has publicNetworkAccess set to Disabled with no private endpoint defined; SQL MI managed identity may be unable to reach the vault for TDE CMK key operations",
+    "No Key Vault RBAC role assignment resource granting the SQL MI managed identity the Key Vault Crypto Service Encryption User role required for TDE CMK",
+    "Application-tier VMSS (vmss-app-prod-001) has no autoscale configuration and runs at fixed capacity of 2",
+    "No resource tagging strategy defined across resources for cost tracking, environment identification, or operational management"
+  ],
+  "correctionsRecommended": [
+    "Add a Key Vault private endpoint in the SQL MI subnet (or a VNet service endpoint) to allow the managed identity to access TDE keys while publicNetworkAccess remains Disabled",
+    "Add a Microsoft.Authorization/roleAssignments resource granting id-sqlmi-prod-001 the Key Vault Crypto Service Encryption User role on kv-threetier-prod-001",
+    "Add Microsoft.Insights/diagnosticSettings resources for vmss-presentation-prod-001, vmss-app-prod-001, lbe-presentation-prod-001, and sqlmi-threetier-prod-001 targeting log-threetier-prod-001",
+    "Consider adding a Microsoft.Insights/autoscaleSettings resource for vmss-app-prod-001 to handle variable application-tier load",
+    "Add a consistent tagging convention (e.g., environment, costCenter, owner) to all resource definitions",
+    "Evaluate upgrading SQL MI to Business Critical tier if zone redundancy is required for the database tier"
+  ],
+  "hardDependencies": [
+    "Key Vault RBAC role assignment for id-sqlmi-prod-001 must exist before SQL MI can configure TDE with customer-managed key"
+  ],
+  "deployable": 1
+}

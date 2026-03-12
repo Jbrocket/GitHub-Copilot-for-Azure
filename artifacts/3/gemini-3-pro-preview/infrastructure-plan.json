@@ -1,0 +1,164 @@
+{
+  "meta": {
+    "planId": "plan-event-driven-pipeline",
+    "generatedAt": "2026-03-11T13:20:00Z",
+    "version": "1.0",
+    "status": "draft"
+  },
+  "inputs": {
+    "userGoal": "Provision an event-driven data processing pipeline using ACA with Pub/Sub integration, connect to Azure Event Grid, and output results to Cosmos DB."
+  },
+  "plan": {
+    "resources": [
+      {
+        "name": "rg-event-pipeline-dev-eastus",
+        "type": "Microsoft.Resources/resourceGroups",
+        "location": "eastus",
+        "sku": "Standard",
+        "reasoning": {
+          "whyChosen": "Organize all related resources in a single lifecycle container.",
+          "alternativesConsidered": ["Existing Resource Group"],
+          "tradeoffs": "None."
+        },
+        "dependencies": [],
+        "references": []
+      },
+      {
+        "name": "evgt-pipeline-dev-eastus",
+        "type": "Microsoft.EventGrid/topics",
+        "location": "eastus",
+        "sku": "Basic",
+        "reasoning": {
+          "whyChosen": "Serverless event routing service for the pipeline entry point.",
+          "alternativesConsidered": ["Event Hubs", "Service Bus"],
+          "tradeoffs": "Event Grid is optimal for discrete events; Event Hubs is better for telemetry streams."
+        },
+        "dependencies": ["rg-event-pipeline-dev-eastus"],
+        "references": [
+          {
+            "title": "Azure Event Grid documentation",
+            "url": "https://learn.microsoft.com/azure/event-grid/"
+          }
+        ]
+      },
+      {
+        "name": "cosmos-pipeline-dev-eastus",
+        "type": "Microsoft.DocumentDB/databaseAccounts",
+        "location": "eastus",
+        "sku": "Standard",
+        "properties": {
+          "databaseAccountOfferType": "Standard",
+          "kind": "GlobalDocumentDB",
+          "locations": [
+            {
+              "locationName": "eastus",
+              "failoverPriority": 0,
+              "isZoneRedundant": false
+            }
+          ]
+        },
+        "reasoning": {
+          "whyChosen": "NoSQL database for flexible schema output storage.",
+          "alternativesConsidered": ["Azure SQL", "Table Storage"],
+          "tradeoffs": "Cosmos DB is more expensive than Table Storage but offers better performance and features."
+        },
+        "dependencies": ["rg-event-pipeline-dev-eastus"],
+        "references": [
+          {
+            "title": "Azure Cosmos DB documentation",
+            "url": "https://learn.microsoft.com/azure/cosmos-db/"
+          }
+        ]
+      },
+      {
+        "name": "cae-pipeline-dev-eastus",
+        "type": "Microsoft.App/managedEnvironments",
+        "location": "eastus",
+        "sku": "Consumption",
+        "properties": {
+          "zoneRedundant": false
+        },
+        "reasoning": {
+          "whyChosen": "Serverless container environment required for ACA.",
+          "alternativesConsidered": ["AKS"],
+          "tradeoffs": "ACA is simpler to manage than AKS but has less fine-grained control."
+        },
+        "dependencies": ["rg-event-pipeline-dev-eastus"],
+        "references": [
+          {
+            "title": "Azure Container Apps environments",
+            "url": "https://learn.microsoft.com/azure/container-apps/environment"
+          }
+        ]
+      },
+      {
+        "name": "ca-processor-dev-eastus",
+        "type": "Microsoft.App/containerApps",
+        "location": "eastus",
+        "sku": "Consumption",
+        "properties": {
+          "managedEnvironmentId": "[resourceId('Microsoft.App/managedEnvironments', 'cae-pipeline-dev-eastus')]",
+          "configuration": {
+            "dapr": {
+              "enabled": true,
+              "appId": "processor-app",
+              "appProtocol": "http",
+              "appPort": 8080
+            },
+            "ingress": {
+              "external": true,
+              "targetPort": 8080
+            }
+          },
+          "template": {
+            "containers": [
+              {
+                "name": "processor",
+                "image": "mcr.microsoft.com/azuredocs/containerapps-helloworld:latest",
+                "resources": {
+                  "cpu": 0.5,
+                  "memory": "1.0Gi"
+                }
+              }
+            ],
+            "scale": {
+              "minReplicas": 0,
+              "maxReplicas": 10
+            }
+          }
+        },
+        "reasoning": {
+          "whyChosen": "Compute resource for processing events using Dapr.",
+          "alternativesConsidered": ["Azure Functions"],
+          "tradeoffs": "ACA allows running arbitrary containerized apps with Dapr support."
+        },
+        "dependencies": [
+          "rg-event-pipeline-dev-eastus",
+          "cae-pipeline-dev-eastus"
+        ],
+        "references": [
+          {
+            "title": "Dapr integration with Azure Container Apps",
+            "url": "https://learn.microsoft.com/azure/container-apps/dapr-overview"
+          }
+        ]
+      }
+    ],
+    "overallReasoning": {
+      "summary": "Event-driven architecture using Event Grid for ingestion, ACA with Dapr for processing, and Cosmos DB for persistence.",
+      "tradeoffs": "Serverless approach minimizes ops overhead but may have cold starts (mitigated by minReplicas if needed)."
+    },
+    "validation": "Plan aligns with standard Azure event-driven patterns.",
+    "architecturePrinciples": [
+      "Serverless",
+      "Event-driven",
+      "Decoupled"
+    ],
+    "references": [
+      {
+        "title": "Azure Architecture Center - Event-driven architecture",
+        "url": "https://learn.microsoft.com/azure/architecture/guide/architecture-styles/event-driven"
+      }
+    ]
+  }
+}

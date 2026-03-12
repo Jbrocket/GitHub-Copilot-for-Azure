@@ -1,0 +1,132 @@
+{
+  "meta": {
+    "status": "draft",
+    "version": "1.0",
+    "description": "IoT Edge solution with anomaly detection, Cosmos DB storage, and SMS alerts via Logic Apps."
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Devices/IotHubs",
+      "name": "iot-hub-edge",
+      "sku": {
+        "name": "S1",
+        "capacity": 1
+      },
+      "location": "eastus",
+      "properties": {
+        "minTlsVersion": "1.2",
+        "cloudToDevice": {
+          "maxDeliveryCount": 10,
+          "defaultTtlAsIso8601": "PT1H",
+          "feedback": {
+            "lockDurationAsIso8601": "PT1M",
+            "ttlAsIso8601": "PT1H",
+            "maxDeliveryCount": 10
+          }
+        },
+        "features": "None"
+      },
+      "dependencies": []
+    },
+    {
+      "type": "Microsoft.DocumentDB/databaseAccounts",
+      "name": "cosmos-iot-data",
+      "location": "eastus",
+      "kind": "GlobalDocumentDB",
+      "properties": {
+        "databaseAccountOfferType": "Standard",
+        "enableFreeTier": false,
+        "locations": [
+          {
+            "locationName": "eastus",
+            "failoverPriority": 0,
+            "isZoneRedundant": false
+          }
+        ],
+        "consistencyPolicy": {
+          "defaultConsistencyLevel": "Session",
+          "maxStalenessPrefix": 100,
+          "maxIntervalInSeconds": 5
+        },
+        "capabilities": [
+          { "name": "EnableServerless" }
+        ]
+      },
+      "dependencies": []
+    },
+    {
+      "type": "Microsoft.StreamAnalytics/streamingjobs",
+      "name": "sa-iot-processing",
+      "location": "eastus",
+      "sku": {
+        "name": "Standard"
+      },
+      "properties": {
+        "sku": {
+          "name": "Standard"
+        },
+        "outputStartMode": "JobStartTime",
+        "eventsOutOfOrderPolicy": "Adjust",
+        "eventsOutOfOrderMaxDelayInSeconds": 0,
+        "eventsLateArrivalMaxDelayInSeconds": 5,
+        "dataLocale": "en-US",
+        "compatibilityLevel": "1.0"
+      },
+      "dependencies": [
+        "iot-hub-edge",
+        "cosmos-iot-data"
+      ]
+    },
+    {
+      "type": "Microsoft.Logic/workflows",
+      "name": "logic-app-alerts",
+      "location": "eastus",
+      "properties": {
+        "state": "Enabled",
+        "definition": {
+          "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+          "contentVersion": "1.0.0.0",
+          "parameters": {},
+          "triggers": {
+            "manual": {
+              "type": "Request",
+              "kind": "Http",
+              "inputs": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "alertType": { "type": "string" },
+                    "message": { "type": "string" },
+                    "timestamp": { "type": "string" }
+                  }
+                }
+              }
+            }
+          },
+          "actions": {
+            "Send_SMS": {
+              "type": "ApiConnection",
+              "inputs": {
+                "host": {
+                  "connection": {
+                    "name": "@parameters('$connections')['twilio']['connectionId']"
+                  }
+                },
+                "method": "post",
+                "body": {
+                  "Body": "@{triggerBody()?['message']}",
+                  "To": "+15550000000",
+                  "From": "+15551234567"
+                },
+                "path": "/2010-04-01/Accounts/{accountSid}/Messages.json"
+              }
+            }
+          },
+          "outputs": {}
+        },
+        "parameters": {}
+      },
+      "dependencies": []
+    }
+  ]
+}

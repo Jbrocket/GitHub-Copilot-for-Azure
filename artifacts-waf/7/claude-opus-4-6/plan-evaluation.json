@@ -1,0 +1,27 @@
+{
+  "overallScore": 0.89,
+  "dimensions": {
+    "goalAlignment": 0.95,
+    "wafConformance": 0.82,
+    "dependencyCompleteness": 0.9,
+    "deploymentViability": 0.88
+  },
+  "risks": [
+    "LRS storage provides no zone or geo redundancy — a single-region failure affects all training data and model artifacts",
+    "No explicit RBAC role assignments for the managed identity to access Key Vault keys (Key Vault Crypto Officer) or storage data plane (Storage Blob Data Contributor)",
+    "No Key Vault key resource defined — CMK encryption references Key Vault but no encryption key is provisioned in the plan",
+    "No diagnostic settings resources to route Key Vault, Storage, or ML workspace audit logs to Log Analytics",
+    "Public network access is enabled on the ML workspace — may not meet stricter security postures for production",
+    "No Azure Container Registry included — ML workspace will auto-create one on first model build or deployment, outside IaC control"
+  ],
+  "correctionsRecommended": [
+    "Add Microsoft.Authorization/roleAssignments resources granting the user-assigned managed identity Key Vault Crypto Officer and Storage Blob Data Contributor roles",
+    "Add a Microsoft.KeyVault/vaults/keys resource to provision the CMK encryption key within the Key Vault",
+    "Consider upgrading both storage accounts from Standard_LRS to Standard_ZRS for zone redundancy in production",
+    "Add Microsoft.Insights/diagnosticSettings resources for Key Vault, both storage accounts, and the ML workspace to route audit logs to Log Analytics",
+    "Restrict ML workspace publicNetworkAccess to Disabled or tighten managedNetwork isolationMode to AllowOnlyApprovedOutbound for production",
+    "Add an explicit Microsoft.ContainerRegistry/registries resource to keep container registry configuration under IaC control"
+  ],
+  "hardDependencies": [],
+  "deployable": 1
+}

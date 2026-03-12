@@ -1,0 +1,69 @@
+{
+  "meta": {
+    "name": "three-tier-vmss-sqlmi",
+    "author": "user",
+    "status": "approved",
+    "description": "Autoscaled VMSS presentation tier, application servers in a separate subnet, and an encrypted SQL Managed Instance backend. Defaults used."
+  },
+  "location": "default",
+  "network": {
+    "vnet": {
+      "name": "vnet",
+      "addressSpace": "10.0.0.0/16",
+      "subnets": [
+        { "name": "presentation-subnet", "prefix": "10.0.1.0/24" },
+        { "name": "app-subnet", "prefix": "10.0.2.0/24" },
+        { "name": "sql-subnet", "prefix": "10.0.3.0/24" }
+      ]
+    }
+  },
+  "resources": [
+    {
+      "id": "presentation-vmss",
+      "type": "Microsoft.Compute/virtualMachineScaleSets",
+      "properties": {
+        "sku": "Standard_D2s_v3",
+        "capacity": 2,
+        "autoscale": {
+          "enabled": true,
+          "min": 2,
+          "max": 10,
+          "rules": [
+            { "metric": "Percentage CPU", "operator": "GreaterThan", "threshold": 70, "action": "ScaleOut", "change": 1, "period": "5m" },
+            { "metric": "Percentage CPU", "operator": "LessThan", "threshold": 30, "action": "ScaleIn", "change": 1, "period": "5m" }
+          ]
+        },
+        "network": { "subnet": "presentation-subnet" },
+        "loadBalancer": "presentation-lb"
+      }
+    },
+    {
+      "id": "app-vmss",
+      "type": "Microsoft.Compute/virtualMachineScaleSets",
+      "properties": {
+        "sku": "Standard_D2s_v3",
+        "capacity": 2,
+        "autoscale": { "enabled": false },
+        "network": { "subnet": "app-subnet" },
+        "loadBalancer": "app-lb"
+      }
+    },
+    {
+      "id": "sql-managed-instance",
+      "type": "Microsoft.Sql/managedInstances",
+      "properties": {
+        "sku": "GP_Gen5_2",
+        "subnet": "sql-subnet",
+        "licenseType": "LicenseIncluded",
+        "administratorLogin": "sqladmin",
+        "administratorLoginPassword": "REPLACE_WITH_SECURE_PASSWORD",
+        "storageSizeInGB": 32,
+        "encryption": {
+          "transparentDataEncryption": true,
+          "keyType": "ServiceManaged"
+        }
+      }
+    }
+  ],
+  "notes": "Plan uses Azure defaults for SKUs and sizing. SQL Managed Instance uses service-managed Transparent Data Encryption (TDE)."
+}

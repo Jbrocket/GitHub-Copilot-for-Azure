@@ -1,0 +1,32 @@
+{
+  "overallScore": 0.57,
+  "dimensions": {
+    "goalAlignment": 0.6,
+    "wafConformance": 0.58,
+    "dependencyCompleteness": 0.4,
+    "deploymentViability": 0.72
+  },
+  "risks": [
+    "Azure ML Workspace requires an associated Storage Account which is not included in the plan — deployment will fail without it",
+    "Application Insights is not included; ML Workspace creates one by default, but omitting it from the plan means no explicit monitoring configuration",
+    "Container Registry is not included; required if custom Docker images are used for inference endpoints",
+    "No private endpoints configured (usePrivateEndpoints: false) — all resources publicly accessible, which is a security risk for production workloads",
+    "No availability zone or geo-redundancy configuration for Cosmos DB — single-region failure could cause data unavailability",
+    "No tagging strategy defined for resource governance and cost tracking",
+    "No explicit resource cross-references or dependency declarations between ML Workspace and Key Vault"
+  ],
+  "correctionsRecommended": [
+    "Add an Azure Storage Account resource — this is a mandatory associated resource for Azure ML Workspace",
+    "Add an Application Insights resource for ML Workspace monitoring and inference endpoint telemetry",
+    "Consider adding an Azure Container Registry if custom inference images will be used",
+    "Enable private endpoints (or document why public access is acceptable) to improve network security posture",
+    "Add explicit dependency links between resources (ML Workspace → Storage Account, Key Vault, Application Insights)",
+    "Configure Cosmos DB backup policy and consider multi-region writes for high-availability scenarios",
+    "Add resource tags for cost tracking and governance (e.g., environment, project, owner)",
+    "Define an inputs.userGoal field and overallReasoning to document the intended workload and architecture rationale"
+  ],
+  "hardDependencies": [
+    "Azure ML Workspace requires an associated Storage Account — deployment will fail without this resource in the plan"
+  ],
+  "deployable": 1
+}

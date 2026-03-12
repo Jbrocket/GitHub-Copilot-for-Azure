@@ -1,0 +1,32 @@
+{
+  "overallScore": 0.75,
+  "dimensions": {
+    "goalAlignment": 0.82,
+    "wafConformance": 0.6,
+    "dependencyCompleteness": 0.78,
+    "deploymentViability": 0.8
+  },
+  "risks": [
+    "No Log Analytics workspace resource defined — ACA managed environment requires one for deployment (mandatory per Azure docs and IaC rules)",
+    "No managed identity on the Container App — WAF security best practice and IaC deployment rules require a user-assigned managed identity",
+    "No Event Grid subscription resource to route events from the topic to the Container App — the pipeline has no wiring between ingestion and processing",
+    "Cosmos DB is single-region with no zone redundancy (isZoneRedundant: false) — reduces reliability for production workloads",
+    "No network isolation — Cosmos DB, Event Grid, and ACA lack private endpoints or VNet integration",
+    "No monitoring or diagnostics resources (Application Insights, alerts) — limits operational visibility",
+    "External ingress enabled on a backend event processor Container App — may expose unnecessary attack surface"
+  ],
+  "correctionsRecommended": [
+    "Add a Microsoft.OperationalInsights/workspaces resource and connect it to the managed environment via logAnalyticsConfiguration (customerId + sharedKey)",
+    "Add a user-assigned managed identity (Microsoft.ManagedIdentity/userAssignedIdentities) and attach it to the Container App",
+    "Add a Microsoft.EventGrid/eventSubscriptions resource to wire the Event Grid topic to the Container App endpoint",
+    "Consider enabling zone redundancy on both Cosmos DB locations and the ACA managed environment for improved reliability",
+    "Add private endpoints for Cosmos DB and disable key-based authentication in favor of RBAC",
+    "Add a CORS policy to the Container App ingress configuration per IaC deployment rules",
+    "Add Dapr component definitions for the Event Grid pub/sub binding and Cosmos DB state/output binding",
+    "Add resource tags for environment, project, and cost-center to support operational excellence"
+  ],
+  "hardDependencies": [
+    "Log Analytics workspace is required for ACA managed environment deployment — environment will fail to provision without logAnalyticsConfiguration"
+  ],
+  "deployable": 1
+}

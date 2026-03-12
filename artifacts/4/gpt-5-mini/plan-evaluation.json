@@ -1,0 +1,33 @@
+{
+  "overallScore": 0.75,
+  "dimensions": {
+    "goalAlignment": 0.95,
+    "wafConformance": 0.65,
+    "dependencyCompleteness": 0.55,
+    "deploymentViability": 0.8
+  },
+  "risks": [
+    "SQL Managed Instance subnet (sql-subnet) is missing required delegation to Microsoft.Sql/managedInstances — Azure requires this for deployment",
+    "No NSG or route table defined for the SQL MI subnet — SQL MI requires both to be associated with its subnet",
+    "Load balancers (presentation-lb, app-lb) are referenced by VMSS resources but not defined in the plan",
+    "No availability zone configuration on any resource — reduces resilience against datacenter-level failures",
+    "No monitoring or diagnostics resources (e.g., Azure Monitor, Log Analytics) — limits operational visibility",
+    "No managed identity or Key Vault integration — SQL admin password uses a placeholder instead of secure secret management",
+    "App-tier VMSS has autoscale disabled with a fixed capacity of 2 — could become a bottleneck under load"
+  ],
+  "correctionsRecommended": [
+    "Add Standard SKU load balancer resources for presentation-lb and app-lb to resolve VMSS references",
+    "Add subnet delegation property for sql-subnet to Microsoft.Sql/managedInstances",
+    "Add NSG and route table resources associated with the SQL MI subnet",
+    "Consider enabling availability zones on VMSS and SQL MI for improved reliability",
+    "Add Azure Monitor / Log Analytics workspace for diagnostics and alerting",
+    "Integrate Azure Key Vault for SQL MI administrator credentials instead of inline placeholder",
+    "Consider enabling autoscale on the app-tier VMSS to handle variable load",
+    "Add managed identity to VMSS instances for secure access to other Azure resources"
+  ],
+  "hardDependencies": [
+    "Load balancers presentation-lb and app-lb are referenced by VMSS resources but absent from the resource list",
+    "SQL MI subnet delegation to Microsoft.Sql/managedInstances is not declared — required for SQL MI provisioning"
+  ],
+  "deployable": 1
+}

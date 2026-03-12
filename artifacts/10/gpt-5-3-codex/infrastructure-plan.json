@@ -1,0 +1,320 @@
+{
+  "meta": {
+    "planId": "plan-iot-edge-anomaly-001",
+    "generatedAt": "2026-03-11T13:22:30.412Z",
+    "version": "0.1-draft",
+    "status": "draft"
+  },
+  "inputs": {
+    "userGoal": "Create an Azure IoT Hub edge deployment with AI module for anomaly detection, output events to Cosmos DB, and send SMS alerts via Logic Apps."
+  },
+  "plan": {
+    "resources": [
+      {
+        "name": "acrAiModules",
+        "type": "Microsoft.ContainerRegistry/registries",
+        "subtype": "Container Registry",
+        "location": "eastus",
+        "sku": "Basic",
+        "properties": {
+          "adminUserEnabled": false
+        },
+        "reasoning": {
+          "whyChosen": "IoT Edge modules are packaged as containers, and ACR is the native private registry integration for IoT Hub and secure module distribution.",
+          "alternativesConsidered": [
+            "Docker Hub",
+            "GitHub Container Registry"
+          ],
+          "tradeoffs": "External registries can work but add external dependency and governance complexity compared with first-party ACR."
+        },
+        "dependencies": [],
+        "dependencyReasoning": null,
+        "references": [
+          {
+            "title": "Azure Container Registry overview",
+            "url": "https://learn.microsoft.com/azure/container-registry/container-registry-intro"
+          }
+        ]
+      },
+      {
+        "name": "iotHubEdge",
+        "type": "Microsoft.Devices/IotHubs",
+        "subtype": "IoT Hub",
+        "location": "eastus",
+        "sku": "S1",
+        "properties": {
+          "publicNetworkAccess": "Enabled",
+          "routing": {
+            "fallbackRoute": {
+              "enabled": true,
+              "source": "DeviceMessages",
+              "endpointNames": [
+                "events"
+              ]
+            }
+          }
+        },
+        "reasoning": {
+          "whyChosen": "IoT Hub is the managed control plane for IoT Edge devices and cloud ingestion, supporting secure device identity, module deployment, and message routing.",
+          "alternativesConsidered": [
+            "Azure Event Hubs only",
+            "Azure IoT Central"
+          ],
+          "tradeoffs": "Event Hubs lacks IoT Edge lifecycle features, while IoT Central is higher-level SaaS with less deployment-level control."
+        },
+        "dependencies": [
+          "acrAiModules"
+        ],
+        "dependencyReasoning": "IoT Edge module deployment references container images stored in ACR.",
+        "references": [
+          {
+            "title": "Azure IoT Hub documentation",
+            "url": "https://learn.microsoft.com/azure/iot-hub/"
+          }
+        ]
+      },
+      {
+        "name": "edgeDeploymentAnomalyAi",
+        "type": "Microsoft.Devices/IotHubs/configurations",
+        "subtype": "IoT Edge Automatic Deployment",
+        "location": "eastus",
+        "sku": "N/A",
+        "properties": {
+          "priority": 10,
+          "targetCondition": "tags.environment='prod'",
+          "modulesContent": {
+            "$edgeAgent": {
+              "properties.desired": {
+                "runtime": {
+                  "type": "docker"
+                },
+                "systemModules": {
+                  "edgeAgent": {
+                    "type": "docker",
+                    "settings": {
+                      "image": "mcr.microsoft.com/azureiotedge-agent:1.5"
+                    }
+                  },
+                  "edgeHub": {
+                    "type": "docker",
+                    "settings": {
+                      "image": "mcr.microsoft.com/azureiotedge-hub:1.5"
+                    }
+                  }
+                },
+                "modules": {
+                  "anomalyDetector": {
+                    "version": "1.0",
+                    "type": "docker",
+                    "status": "running",
+                    "restartPolicy": "always",
+                    "settings": {
+                      "image": "<acr-login-server>/anomaly-detector:1.0"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "reasoning": {
+          "whyChosen": "Automatic IoT Edge deployment provides centralized rollout of the AI anomaly detection module to tagged edge devices.",
+          "alternativesConsidered": [
+            "Manual per-device deployment",
+            "Device-side script deployment"
+          ],
+          "tradeoffs": "Automatic deployments require disciplined device tagging and validation but scale better than manual operations."
+        },
+        "dependencies": [
+          "iotHubEdge",
+          "acrAiModules"
+        ],
+        "dependencyReasoning": "Configuration is scoped under IoT Hub and pulls the AI module image from ACR.",
+        "references": [
+          {
+            "title": "Deploy modules at scale using automatic deployments",
+            "url": "https://learn.microsoft.com/azure/iot-edge/how-to-deploy-at-scale"
+          }
+        ]
+      },
+      {
+        "name": "cosmosAnomalyStore",
+        "type": "Microsoft.DocumentDB/databaseAccounts",
+        "subtype": "Cosmos DB for NoSQL",
+        "location": "eastus",
+        "sku": "Standard",
+        "properties": {
+          "databaseAccountOfferType": "Standard",
+          "capabilities": [
+            {
+              "name": "EnableServerless"
+            }
+          ]
+        },
+        "reasoning": {
+          "whyChosen": "Cosmos DB provides low-latency JSON storage with global-ready scalability for anomaly events and operational telemetry.",
+          "alternativesConsidered": [
+            "Azure Table Storage",
+            "Azure SQL Database"
+          ],
+          "tradeoffs": "Cosmos DB is typically higher cost at scale than basic storage but provides richer query and throughput behavior for telemetry workloads."
+        },
+        "dependencies": [],
+        "dependencyReasoning": null,
+        "references": [
+          {
+            "title": "Azure Cosmos DB for NoSQL overview",
+            "url": "https://learn.microsoft.com/azure/cosmos-db/nosql/introduction"
+          }
+        ]
+      },
+      {
+        "name": "cosmosAnomalyDb",
+        "type": "Microsoft.DocumentDB/databaseAccounts/sqlDatabases",
+        "subtype": "Cosmos SQL Database",
+        "location": "eastus",
+        "sku": "N/A",
+        "properties": {
+          "resource": {
+            "id": "anomalydetectiondb"
+          }
+        },
+        "reasoning": {
+          "whyChosen": "A dedicated logical database keeps anomaly workload data isolated and easier to govern.",
+          "alternativesConsidered": [
+            "Reuse shared Cosmos database"
+          ],
+          "tradeoffs": "Shared databases simplify initial setup but increase blast radius and policy coupling."
+        },
+        "dependencies": [
+          "cosmosAnomalyStore"
+        ],
+        "dependencyReasoning": "Database is a child resource of the Cosmos DB account.",
+        "references": [
+          {
+            "title": "Manage Azure Cosmos DB SQL resources",
+            "url": "https://learn.microsoft.com/azure/cosmos-db/nosql/manage-with-templates"
+          }
+        ]
+      },
+      {
+        "name": "cosmosAnomalyContainer",
+        "type": "Microsoft.DocumentDB/databaseAccounts/sqlDatabases/containers",
+        "subtype": "Cosmos SQL Container",
+        "location": "eastus",
+        "sku": "N/A",
+        "properties": {
+          "resource": {
+            "id": "events",
+            "partitionKey": {
+              "paths": [
+                "/deviceId"
+              ],
+              "kind": "Hash"
+            }
+          }
+        },
+        "reasoning": {
+          "whyChosen": "A partitioned container supports efficient write scaling and query filtering by device identity.",
+          "alternativesConsidered": [
+            "Partition by /anomalyType"
+          ],
+          "tradeoffs": "Partitioning by device can create skew for highly active devices; anomalyType partitioning can hurt per-device investigation queries."
+        },
+        "dependencies": [
+          "cosmosAnomalyDb"
+        ],
+        "dependencyReasoning": "Container is a child resource under the SQL database.",
+        "references": [
+          {
+            "title": "Partitioning in Azure Cosmos DB for NoSQL",
+            "url": "https://learn.microsoft.com/azure/cosmos-db/partitioning-overview"
+          }
+        ]
+      },
+      {
+        "name": "logicAppSmsAlerts",
+        "type": "Microsoft.Logic/workflows",
+        "subtype": "Logic Apps Consumption",
+        "location": "eastus",
+        "sku": "Standard",
+        "properties": {
+          "state": "Enabled",
+          "definition": {
+            "triggers": {
+              "when_http_request_received": {
+                "type": "Request",
+                "kind": "Http",
+                "inputs": {
+                  "schema": {}
+                }
+              }
+            }
+          }
+        },
+        "reasoning": {
+          "whyChosen": "Logic Apps provides a low-code orchestrator for alert fanout and SMS integration with minimal operational overhead.",
+          "alternativesConsidered": [
+            "Azure Functions for SMS orchestration",
+            "Event Grid plus custom worker"
+          ],
+          "tradeoffs": "Logic Apps is fast to implement but can be less flexible than custom code for complex branching and testing."
+        },
+        "dependencies": [],
+        "dependencyReasoning": null,
+        "references": [
+          {
+            "title": "Azure Logic Apps documentation",
+            "url": "https://learn.microsoft.com/azure/logic-apps/"
+          }
+        ]
+      },
+      {
+        "name": "communicationSmsService",
+        "type": "Microsoft.Communication/communicationServices",
+        "subtype": "Azure Communication Services",
+        "location": "eastus",
+        "sku": "Free",
+        "properties": {
+          "dataLocation": "UnitedStates"
+        },
+        "reasoning": {
+          "whyChosen": "Azure Communication Services is the native Azure SMS provider integrated with Logic Apps connectors.",
+          "alternativesConsidered": [
+            "Twilio connector"
+          ],
+          "tradeoffs": "Twilio can have broader international carrier coverage depending on region, while ACS provides tighter Azure-native integration."
+        },
+        "dependencies": [],
+        "dependencyReasoning": null,
+        "references": [
+          {
+            "title": "Azure Communication Services SMS quickstart",
+            "url": "https://learn.microsoft.com/azure/communication-services/quickstarts/sms/send"
+          }
+        ]
+      }
+    ],
+    "overallReasoning": {
+      "summary": "The architecture uses IoT Edge for near-device anomaly inference, IoT Hub for secure control and telemetry ingress, Cosmos DB for anomaly event persistence, and Logic Apps plus ACS for SMS alerting automation.",
+      "tradeoffs": "This plan prioritizes managed services and speed of delivery over lowest possible cost. Additional hardening (private endpoints, separate environments, and secret rotation automation) can be added in an approved iteration."
+    },
+    "validation": "All resources are co-located in eastus for simpler operations and lower latency. Dependency ordering ensures module registry and hub are available before edge deployment and that Cosmos logical resources are created in hierarchy order.",
+    "architecturePrinciples": [
+      "Secure by default",
+      "Operational simplicity",
+      "Elastic scalability",
+      "Event-driven integration"
+    ],
+    "references": [
+      {
+        "title": "Azure Well-Architected Framework",
+        "url": "https://learn.microsoft.com/azure/well-architected/"
+      },
+      {
+        "title": "Azure IoT reference architecture",
+        "url": "https://learn.microsoft.com/azure/architecture/reference-architectures/iot"
+      }
+    ]
+  }
+}

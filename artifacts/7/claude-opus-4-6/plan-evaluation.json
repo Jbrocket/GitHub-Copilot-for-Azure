@@ -1,0 +1,31 @@
+{
+  "overallScore": 0.75,
+  "dimensions": {
+    "goalAlignment": 0.82,
+    "wafConformance": 0.72,
+    "dependencyCompleteness": 0.88,
+    "deploymentViability": 0.5
+  },
+  "risks": [
+    "ADLS Gen2 (HNS-enabled) storage used as ML workspace default storage is unsupported per Microsoft documentation",
+    "Storage networkAcls defaultAction is 'Allow' — data lake accessible from all networks despite 'secure' goal",
+    "ML workspace publicNetworkAccess set to 'Enabled' — training endpoints publicly accessible",
+    "Standard_LRS provides no geo or zone redundancy for training data and model artifacts",
+    "No RBAC role assignments defined for the managed identity on Storage, Key Vault, or ACR",
+    "No private endpoints configured for Key Vault, Storage, or ML workspace",
+    "Basic ACR SKU does not support private link — limits network isolation options"
+  ],
+  "correctionsRecommended": [
+    "Split into two storage accounts: a non-HNS StorageV2 as ML workspace default, and an HNS-enabled ADLS Gen2 as a mounted datastore for training data",
+    "Set storage networkAcls.defaultAction to 'Deny' and configure VNet service endpoints or private endpoints",
+    "Add explicit RBAC role assignments: Storage Blob Data Contributor, Key Vault Crypto Officer, AcrPull for the managed identity",
+    "Consider Standard_ZRS or Standard_GRS for storage durability in production",
+    "Add resource tags (environment, project, cost-center) for operational governance",
+    "Evaluate switching ML workspace managed network to AllowOnlyApprovedOutbound for tighter egress control",
+    "Upgrade ACR to Premium SKU if private link is required for network isolation"
+  ],
+  "hardDependencies": [
+    "ML workspace storageAccount references HNS-enabled storage (isHnsEnabled: true) — Azure ML does not support ADLS Gen2 as default workspace storage"
+  ],
+  "deployable": 0
+}

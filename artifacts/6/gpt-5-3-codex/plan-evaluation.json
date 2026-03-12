@@ -1,0 +1,30 @@
+{
+  "overallScore": 0.85,
+  "dimensions": {
+    "goalAlignment": 0.95,
+    "wafConformance": 0.6,
+    "dependencyCompleteness": 0.95,
+    "deploymentViability": 0.9
+  },
+  "risks": [
+    "Standard_LRS storage provides no zone or geo redundancy; single-zone failure could cause data loss",
+    "No Key Vault resource for secret and credential management across services",
+    "No private endpoints or network isolation configured for Databricks, Synapse, or Storage",
+    "No monitoring, diagnostics, or alerting resources (e.g., Log Analytics, Azure Monitor)",
+    "No explicit managed identity configuration for inter-service authentication (ADF→Storage, Databricks→Storage, Synapse→Storage)",
+    "Storage account local auth (key access) not explicitly disabled per Azure security best practices",
+    "No resource tagging strategy defined for cost allocation and operational governance"
+  ],
+  "correctionsRecommended": [
+    "Upgrade storage SKU from Standard_LRS to Standard_ZRS or Standard_GRS for production redundancy",
+    "Add an Azure Key Vault resource for centralized secret and credential management",
+    "Configure system-assigned managed identities for ADF, Databricks, and Synapse with RBAC roles on the storage account",
+    "Add private endpoints for Storage, Synapse, and Databricks to restrict public network access",
+    "Add a Log Analytics workspace and Azure Monitor resource for diagnostics, alerting, and pipeline monitoring",
+    "Explicitly disable storage account local auth (shared key access) and public blob access",
+    "Define a consistent resource tagging strategy (e.g., environment, cost-center, owner)",
+    "Consider VNet integration for the Databricks workspace to enable secure cluster connectivity"
+  ],
+  "hardDependencies": [],
+  "deployable": 1
+}

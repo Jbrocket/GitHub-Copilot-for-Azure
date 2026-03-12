@@ -1,0 +1,28 @@
+{
+  "overallScore": 0.87,
+  "dimensions": {
+    "goalAlignment": 0.95,
+    "wafConformance": 0.65,
+    "dependencyCompleteness": 0.95,
+    "deploymentViability": 0.92
+  },
+  "risks": [
+    "No managed identity configured on App Service despite 'secure by default with managed identity' being stated as an architecture principle — the app will need stored credentials to access Azure OpenAI and Cosmos DB",
+    "Azure OpenAI has disableLocalAuth set to false — key-based authentication remains enabled, contrary to WAF security best practices that recommend Entra ID-based auth",
+    "Both Azure OpenAI and Cosmos DB have publicNetworkAccess set to Enabled with no VNet isolation or private endpoints",
+    "No monitoring or observability resources included (Application Insights, Log Analytics workspace) — WAF Operational Excellence pillar gap",
+    "APIM Consumption tier has cold-start latency (~1-2 seconds on first request) which may degrade the real-time Q&A user experience",
+    "Single-region deployment (eastus only) with no disaster recovery or multi-region failover strategy",
+    "App Service Plan B1 tier does not support deployment slots or autoscale — limits operational agility for production"
+  ],
+  "correctionsRecommended": [
+    "Add a system-assigned or user-assigned managed identity to the App Service (app-docqa-prod-001) and configure RBAC role assignments for Azure OpenAI (Cognitive Services OpenAI User) and Cosmos DB (Cosmos DB Built-in Data Contributor)",
+    "Set disableLocalAuth to true on the Azure OpenAI resource (oai-docqa-prod-001) to enforce Entra ID-only authentication",
+    "Add an Application Insights resource and/or Log Analytics workspace for end-to-end monitoring, diagnostics, and alerting across all resources",
+    "Add an Azure Key Vault resource for managing any secrets that cannot use managed identity authentication",
+    "Plan for VNet integration on App Service and private endpoints on OpenAI, Cosmos DB, and APIM for production network isolation",
+    "Consider upgrading APIM from Consumption to BasicV2 or StandardV2 tier for production workloads with sustained traffic to eliminate cold-start latency and gain VNet integration support"
+  ],
+  "hardDependencies": [],
+  "deployable": 1
+}

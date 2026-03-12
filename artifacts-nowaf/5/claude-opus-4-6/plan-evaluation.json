@@ -1,0 +1,31 @@
+{
+  "overallScore": 0.88,
+  "dimensions": {
+    "goalAlignment": 0.95,
+    "wafConformance": 0.72,
+    "dependencyCompleteness": 0.93,
+    "deploymentViability": 0.92
+  },
+  "risks": [
+    "Consumption plan (Y1) is used instead of the recommended Flex Consumption (FC1); Y1 has cold starts, 10-minute max timeout, and no VNet integration support",
+    "Public network access is enabled on both Key Vault and Cosmos DB with no private endpoint or network isolation",
+    "Storage account local auth (shared key access) is not explicitly disabled, contrary to security best practices",
+    "Standard_LRS storage provides no geo-redundancy; data loss risk if the primary region fails",
+    "Single-region deployment (eastus) with no failover or zone redundancy for any resource",
+    "No explicit RBAC role assignments defined for the managed identity to access Storage, Cosmos DB, or Key Vault data planes",
+    "Missing WEBSITE_CONTENTAZUREFILECONNECTIONSTRING and WEBSITE_CONTENTSHARE app settings required by Consumption plan on Windows for dynamic scaling",
+    "No diagnostic settings (Microsoft.Insights/diagnosticSettings) defined for the Function App"
+  ],
+  "correctionsRecommended": [
+    "Switch App Service Plan from Consumption (Y1) to Flex Consumption (FC1) per Azure Functions deployment best practices",
+    "Add RBAC role assignment resources for the managed identity: Storage Blob Data Owner, Storage Blob Data Contributor, Storage Queue Data Contributor, Storage Table Data Contributor, and Monitoring Metrics Publisher",
+    "Disable storage account local auth by setting allowSharedKeyAccess to false",
+    "Add WEBSITE_CONTENTAZUREFILECONNECTIONSTRING and WEBSITE_CONTENTSHARE app settings for Consumption plan compatibility, or migrate to FC1 which uses blob-based deployment",
+    "Add Microsoft.Insights/diagnosticSettings resource for the Function App to persist logs",
+    "Consider adding private endpoints for Key Vault and Cosmos DB to restrict public network access",
+    "Consider upgrading storage redundancy to ZRS or GRS for production resilience",
+    "Add resource tags for cost tracking and operational governance"
+  ],
+  "hardDependencies": [],
+  "deployable": 1
+}
