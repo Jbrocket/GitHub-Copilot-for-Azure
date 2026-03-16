@@ -19,6 +19,7 @@ import { fileURLToPath } from "url";
 import { type CopilotSession, CopilotClient, type SessionEvent, approveAll } from "@github/copilot-sdk";
 import { redactSecrets } from "./redact";
 import { listSkills } from "./skill-loader";
+import { generateThinkingLogs } from "./thinking-log";
 
 // Re-export for backward compatibility (consumers still import from agent-runner)
 export { getAllAssistantMessages } from "./evaluate";
@@ -504,7 +505,7 @@ export function useAgentRunner() {
 
       // Copilot client with yolo mode
       const cliArgs: string[] = config.nonInteractive ? ["--yolo"] : [];
-      if (process.env.DEBUG && isTest()) {
+      if (isTest()) {
         cliArgs.push("--log-dir");
         cliArgs.push(buildLogFilePath());
       }
@@ -643,6 +644,21 @@ export function useAgentRunner() {
         await session.sendAndWait({ prompt: followUpPrompt }, FOLLOW_UP_TIMEOUT);
       }
 
+      // Write thinking-process logs eagerly (don't wait for afterEach)
+      try {
+        const sessionTs = Date.now();
+        const sessionId = `${sessionTs}-${getTestName()}`;
+        const logsDir = path.join(DEFAULT_LOGS_DIR, sessionId);
+        generateThinkingLogs(agentMetadata.events, logsDir, config.prompt);
+        if (process.env.DEBUG) {
+          console.log(`Thinking logs written to: ${logsDir}`);
+        }
+      } catch (e) {
+        if (process.env.DEBUG) {
+          console.warn("Failed to write thinking logs:", e);
+        }
+      }
+
       return agentMetadata;
     } catch (error) {
       // Mark as complete to stop event processing
@@ -754,6 +770,7 @@ export function getIntegrationSkipReason(): string | undefined {
 }
 
 const DEFAULT_REPORT_DIR = path.join(__dirname, "..", "reports");
+const DEFAULT_LOGS_DIR = path.join(__dirname, "..", "..", "logs");
 const TIME_STAMP = (process.env.START_TIMESTAMP || new Date().toISOString()).replace(/[:.]/g, "-");
 
 function buildShareFilePath(): string {
